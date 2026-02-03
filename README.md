@@ -74,8 +74,8 @@ Config files live at `~/.config/orchestrator/`:
     
     "copilot": {
       "command": "/opt/homebrew/bin/copilot",
-      "agent": "job-search",
       "allowAllTools": true,
+      "allowAllPaths": true,
       "model": null
     },
     
@@ -93,8 +93,10 @@ Config files live at `~/.config/orchestrator/`:
 
 | Backend | CLI | Description |
 |---------|-----|-------------|
-| `copilot` | GitHub Copilot CLI | `copilot --agent <agent> -p "prompt" --allow-all-tools` |
+| `copilot` | GitHub Copilot CLI | `copilot -p "prompt" --allow-all-tools --allow-all-paths` |
 | `claude` | Claude Code CLI | `claude -p "prompt" --dangerously-skip-permissions --output-format stream-json` |
+
+> **Note:** Sub-agents run **without** the `--agent` flag. Custom agents restrict the available toolset (e.g., to only `report_intent`, `update_todo`). By omitting `--agent`, sub-agents get full access to Copilot's built-in tools: `bash`, `view`, `edit`, `create`, `grep`.
 
 ### Environment Variables
 
