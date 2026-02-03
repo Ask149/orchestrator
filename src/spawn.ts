@@ -12,6 +12,7 @@ import path from 'path';
 import { buildEnrichedPrompt, summarizeOutput } from './context.js';
 import { getBackend, BackendRegistry } from './backends.js';
 import type { SubAgentTask, TaskResult, MCPConfig, CLIConfig, CLIBackendOptions } from './types.js';
+import { getRecommendedTimeout } from './types.js';
 
 // Configuration paths
 const CONFIG_DIR = path.join(process.env.HOME || '', '.config/orchestrator');
@@ -144,7 +145,10 @@ export async function spawnSubAgent(
 ): Promise<TaskResult> {
   const startTime = Date.now();
   const workspace = task.workspace || defaultWorkspace;
-  const timeout = (task.timeout_seconds || defaultTimeout) * 1000;
+  
+  // Smart timeout: use task override > MCP-recommended > default
+  const recommendedTimeout = getRecommendedTimeout(task.mcp_servers);
+  const timeout = (task.timeout_seconds || Math.max(recommendedTimeout, defaultTimeout)) * 1000;
 
   // Load CLI config if not provided
   const config = cliConfig || await loadCLIConfig();

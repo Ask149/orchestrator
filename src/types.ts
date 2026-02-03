@@ -130,3 +130,48 @@ export interface MCPServerConfig {
 export interface MCPConfig {
   mcpServers: Record<string, MCPServerConfig>;
 }
+
+/**
+ * MCP Server timeout configuration
+ * Some servers (like Playwright) need more time to start/execute
+ */
+export interface MCPServerTimeouts {
+  [serverName: string]: number;  // timeout in seconds
+}
+
+/**
+ * Default timeout recommendations based on observed behavior
+ */
+export const DEFAULT_MCP_TIMEOUTS: MCPServerTimeouts = {
+  // Fast servers (15-30s)
+  'filesystem': 30,
+  'memory': 30,
+  
+  // Medium servers (45-60s)  
+  'github': 60,
+  'google-tasks': 60,
+  
+  // Slow servers (90-120s) - browser/auth overhead
+  'playwright': 120,
+  'google-calendar': 90,
+  'leetcode': 90,
+  
+  // Default for unknown servers
+  '_default': 60
+};
+
+/**
+ * Get recommended timeout for MCP servers used in a task
+ */
+export function getRecommendedTimeout(mcpServers?: string[]): number {
+  if (!mcpServers || mcpServers.length === 0) {
+    return DEFAULT_MCP_TIMEOUTS['_default'];
+  }
+  
+  // Return the max timeout among requested servers
+  return Math.max(
+    ...mcpServers.map(server => 
+      DEFAULT_MCP_TIMEOUTS[server] ?? DEFAULT_MCP_TIMEOUTS['_default']
+    )
+  );
+}

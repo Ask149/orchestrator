@@ -105,6 +105,21 @@ Config files live at `~/.config/orchestrator/`:
 | `COPILOT_CLI` | `/opt/homebrew/bin/copilot` | Path to Copilot CLI |
 | `CLAUDE_CLI` | `claude` | Path to Claude Code CLI |
 
+### Smart Timeout Configuration
+
+The orchestrator automatically selects appropriate timeouts based on MCP servers requested:
+
+| MCP Server | Default Timeout | Reason |
+|------------|-----------------|--------|
+| `filesystem`, `memory` | 30s | Fast local operations |
+| `github`, `google-tasks` | 60s | API calls + auth overhead |
+| `google-calendar`, `leetcode` | 90s | OAuth + complex APIs |
+| `playwright` | **120s** | Browser startup + page rendering |
+
+**Logic:** `effective_timeout = max(task.timeout_seconds, recommended_for_servers, default)`
+
+Override with explicit `timeout_seconds` in task definition when needed.
+
 ## Usage
 
 ### Tool: `spawn_subagents`
