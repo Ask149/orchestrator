@@ -173,6 +173,11 @@ export async function spawnSubAgent(
     workspace
   );
 
+  // Augment prompt with MCP fallback instructions if backend supports it
+  const finalPrompt = backend.augmentPromptForMCP 
+    ? backend.augmentPromptForMCP(enrichedPrompt, task.mcp_servers)
+    : enrichedPrompt;
+
   // Create MCP config (filtered if specific servers requested)
   const mcpConfigPath = await createFilteredMCPConfig(task.mcp_servers, task.id);
 
@@ -191,7 +196,7 @@ export async function spawnSubAgent(
   };
 
   // Build args using backend
-  const args = backend.buildArgs(enrichedPrompt, backendOptions);
+  const args = backend.buildArgs(finalPrompt, backendOptions);
   const env = backend.buildEnv(mcpConfigPath, process.env as NodeJS.ProcessEnv);
 
   return new Promise<TaskResult>((resolve) => {
@@ -260,7 +265,7 @@ export async function spawnSubAgent(
           };
 
       // Log for audit
-      await logExecution(task, result, enrichedPrompt, backendName);
+      await logExecution(task, result, finalPrompt, backendName);
 
       resolve(result);
     });

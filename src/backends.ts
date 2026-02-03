@@ -17,10 +17,50 @@ import type { CLIBackend, CLIBackendOptions, ParsedOutput, CLIConfig } from './t
  * - --allow-all-tools — Auto-approve all tools
  * - --model <model> — Specify model
  */
+/**
+ * MCP Tool Fallback Instructions
+ * 
+ * Copilot CLI doesn't load MCP servers in non-interactive mode.
+ * These instructions help sub-agents use npm packages directly as fallback.
+ */
+const BROWSER_AUTOMATION_FALLBACK = `
+## Browser Automation (No MCP Tools Available)
+
+You do NOT have browser_navigate or browser_snapshot MCP tools.
+Use npm playwright directly with bash commands:
+
+\`\`\`bash
+# Create and run Playwright script
+cat > /tmp/browser_task.js << 'SCRIPT'
+const { chromium } = require('playwright');
+(async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  await page.goto('YOUR_URL');
+  console.log('Title:', await page.title());
+  console.log('Content:', await page.content().then(c => c.slice(0, 2000)));
+  await browser.close();
+})();
+SCRIPT
+cd ~ && node browser_task.js
+\`\`\`
+`;
+
 export const CopilotBackend: CLIBackend = {
   name: 'copilot',
   
   defaultCommand: '/opt/homebrew/bin/copilot',
+  
+  /**
+   * Augment prompt with MCP fallback instructions if browser automation is needed
+   */
+  augmentPromptForMCP(prompt: string, mcpServers?: string[]): string {
+    // If playwright is requested, add fallback instructions
+    if (mcpServers?.includes('playwright')) {
+      return `${prompt}\n\n${BROWSER_AUTOMATION_FALLBACK}`;
+    }
+    return prompt;
+  },
   
   buildArgs(prompt: string, options: CLIBackendOptions): string[] {
     const args: string[] = [];
@@ -30,9 +70,9 @@ export const CopilotBackend: CLIBackend = {
     // Without --agent, sub-agents get full built-in tools (bash, view, edit, create, grep)
     
     // Note: We DON'T pass --additional-mcp-config because:
-    // 1. Copilot CLI has strict schema validation that rejects our filtered configs
-    // 2. Sub-agents automatically inherit MCP servers from ~/.copilot/mcp-config.json
-    // The mcp_servers filter in tasks is informational only (for logging/auditing)
+    // 1. Copilot CLI has strict schema validation (rejects command/args format in non-interactive)
+    // 2. MCP servers require stdio communication that CLI doesn't set up automatically
+    // Solution: Augment prompts with npm package instructions as fallback
     
     // Prompt (programmatic mode)
     args.push('-p', prompt);

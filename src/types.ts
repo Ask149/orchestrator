@@ -51,6 +51,11 @@ export interface CLIBackend {
   buildArgs(prompt: string, options: CLIBackendOptions): string[];
   buildEnv(mcpConfigPath: string | null, baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv;
   parseOutput(stdout: string, stderr: string, exitCode: number): ParsedOutput;
+  /**
+   * Optional: Augment prompt with MCP fallback instructions
+   * Used when MCP tools aren't available in CLI sub-agents
+   */
+  augmentPromptForMCP?(prompt: string, mcpServers?: string[]): string;
 }
 
 /**
