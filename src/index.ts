@@ -13,8 +13,9 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import { spawnSubAgents, getAvailableBackends } from './spawn.js';
+import { spawnSubAgents, getAvailableBackends, activeTasks } from './spawn.js';
 import type { SpawnSubagentsInput, SpawnSubagentsOutput } from './types.js';
+import { logger } from './logger.js';
 
 const DEFAULT_WORKSPACE = process.env.ORCHESTRATOR_WORKSPACE || process.cwd();
 const DEFAULT_TIMEOUT = 120; // seconds
@@ -52,7 +53,7 @@ const SpawnSubagentsInputSchema = z.object({
 const server = new Server(
   {
     name: 'mcp-orchestrator',
-    version: '1.1.0'
+    version: '1.0.1'
   },
   {
     capabilities: {
@@ -195,7 +196,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const defaultWorkspace = input.default_workspace || DEFAULT_WORKSPACE;
   const defaultTimeout = input.default_timeout_seconds || DEFAULT_TIMEOUT;
 
-  console.error(`[orchestrator] Spawning ${input.tasks.length} sub-agents...`);
+  logger.info(`Spawning ${input.tasks.length} sub-agents`, { taskIds: input.tasks.map(t => t.id) });
 
   const startTime = Date.now();
   const results = await spawnSubAgents(input.tasks, defaultWorkspace, defaultTimeout);
@@ -209,7 +210,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     total_duration_ms: totalDuration
   };
 
-  console.error(`[orchestrator] Completed: ${output.completed}/${output.total} in ${totalDuration}ms`);
+  logger.info(`Completed: ${output.completed}/${output.total}`, { totalDuration, completed: output.completed, failed: output.failed });
 
   return {
     content: [
@@ -221,14 +222,49 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   };
 });
 
+// Graceful shutdown handling
+let isShuttingDown = false;
+
+async function shutdown(signal: string): Promise<void> {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  logger.info(`Received ${signal}, shutting down gracefully`, { activeTasks: activeTasks.size });
+
+  // Wait for active tasks to complete (max 30s)
+  const deadline = Date.now() + 30000;
+  while (activeTasks.size > 0 && Date.now() < deadline) {
+    logger.debug(`Waiting for ${activeTasks.size} active tasks...`);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  if (activeTasks.size > 0) {
+    logger.warn(`Force shutdown with active tasks`, { remaining: activeTasks.size });
+  } else {
+    logger.info('All tasks completed, shutdown clean');
+  }
+
+  process.exit(0);
+}
+
+// Cross-platform signal handling
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+// Windows: handle shutdown via IPC message
+if (process.platform === 'win32') {
+  process.on('message', (msg) => {
+    if (msg === 'shutdown') shutdown('IPC shutdown');
+  });
+}
+
 // Start server
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('[orchestrator] MCP Orchestrator server started');
+  logger.info('MCP Orchestrator server started', { version: '1.1.0' });
 }
 
 main().catch((error) => {
-  console.error('[orchestrator] Fatal error:', error);
+  logger.error('Fatal error', { error: error.message, stack: error.stack });
   process.exit(1);
 });

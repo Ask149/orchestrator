@@ -117,6 +117,9 @@ Defaults are secure: `allowAllTools` and `allowAllPaths` are `false`. Enable exp
 |----------|---------|-------------|
 | `COPILOT_CLI` | `copilot` | Path to Copilot CLI |
 | `CLAUDE_CLI` | `claude` | Path to Claude Code CLI |
+| `ORCHESTRATOR_DEFAULT_BACKEND` | `copilot` | Default CLI backend (`copilot` or `claude`) |
+| `ORCHESTRATOR_WORKSPACE` | cwd | Default workspace for tasks |
+| `LOG_LEVEL` | `INFO` | Logging level: `DEBUG`, `INFO`, `WARN`, `ERROR` |
 
 ### Smart Timeout Configuration
 
@@ -261,6 +264,33 @@ Execution logs are written to `<config-dir>/logs/YYYY-MM-DD.jsonl`:
 ```jsonl
 {"timestamp":"2026-02-01T10:00:00.000Z","task_id":"stripe","backend":"copilot","success":true,"duration_ms":5432}
 ```
+
+## Production Features
+
+### Health Check
+
+Verify CLI backends are available before deployment:
+
+```bash
+npm run health
+# or
+npx mcp-orchestrator-health
+```
+
+Returns JSON with backend availability and exit code 0 if at least one backend is available.
+
+### Graceful Shutdown
+
+Server waits up to 30 seconds for active tasks to complete on `SIGTERM`/`SIGINT`.
+
+### Automatic Retry
+
+Transient failures (timeout, connection reset) are automatically retried once with a 2s delay.
+
+### Log Rotation
+
+Application logs auto-rotate at 10MB:
+- `~/.config/orchestrator/logs/orchestrator.jsonl`
 
 ## Development
 

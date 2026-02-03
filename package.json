@@ -1,11 +1,12 @@
 {
   "name": "@ask149/mcp-orchestrator",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP server for spawning parallel Copilot sub-agents with context passing",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "mcp-orchestrator": "dist/index.js"
+    "mcp-orchestrator": "dist/index.js",
+    "mcp-orchestrator-health": "dist/health.js"
   },
   "files": [
     "dist",
@@ -24,6 +25,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
+    "health": "node dist/health.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "prepublishOnly": "npm run build && npm test"

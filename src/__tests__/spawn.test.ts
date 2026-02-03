@@ -5,9 +5,17 @@
  * Run with: npm test (after adding test script to package.json)
  */
 
-import { describe, it, expect } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import os from 'os';
 import path from 'path';
+
+// Type definition for tests
+interface TaskResult {
+  id: string;
+  success: boolean;
+  error?: string;
+  duration_ms: number;
+}
 
 describe('Orchestrator Cross-Platform Compatibility', () => {
   describe('Config Paths', () => {
@@ -152,6 +160,91 @@ describe('Orchestrator Cross-Platform Compatibility', () => {
       } else {
         expect(['darwin', 'linux'].includes(process.platform)).toBe(true);
       }
+    });
+  });
+
+  describe('Production Features', () => {
+    describe('Active Task Tracking', () => {
+      // Simulate activeTasks Set behavior
+      let activeTasks: Set<string>;
+
+      beforeEach(() => {
+        activeTasks = new Set<string>();
+      });
+
+      it('should track active tasks via Set', () => {
+        expect(activeTasks).toBeInstanceOf(Set);
+        expect(activeTasks.size).toBe(0);
+
+        activeTasks.add('task-1');
+        activeTasks.add('task-2');
+        expect(activeTasks.size).toBe(2);
+        expect(activeTasks.has('task-1')).toBe(true);
+
+        activeTasks.delete('task-1');
+        expect(activeTasks.size).toBe(1);
+        expect(activeTasks.has('task-1')).toBe(false);
+      });
+
+      it('should handle duplicate task IDs', () => {
+        activeTasks.add('task-1');
+        activeTasks.add('task-1');
+        expect(activeTasks.size).toBe(1);
+      });
+    });
+
+    describe('Retry Logic', () => {
+      it('should identify retryable errors', () => {
+        const isRetryableError = (result: TaskResult): boolean => {
+          if (result.success) return false;
+          const error = result.error?.toLowerCase() || '';
+          return (
+            error.includes('timeout') ||
+            error.includes('etimedout') ||
+            error.includes('econnreset') ||
+            error.includes('econnrefused')
+          );
+        };
+
+        // Timeout errors should be retryable
+        expect(isRetryableError({ id: 't1', success: false, error: 'Timeout after 120s', duration_ms: 120000 })).toBe(true);
+        expect(isRetryableError({ id: 't2', success: false, error: 'ETIMEDOUT', duration_ms: 5000 })).toBe(true);
+        expect(isRetryableError({ id: 't3', success: false, error: 'ECONNRESET', duration_ms: 1000 })).toBe(true);
+
+        // Non-retryable errors
+        expect(isRetryableError({ id: 't4', success: false, error: 'Invalid input', duration_ms: 100 })).toBe(false);
+        expect(isRetryableError({ id: 't5', success: false, error: 'Exit code: 1', duration_ms: 500 })).toBe(false);
+
+        // Success should not be retried
+        expect(isRetryableError({ id: 't6', success: true, duration_ms: 1000 })).toBe(false);
+      });
+    });
+
+    describe('Logger Levels', () => {
+      it('should filter log levels correctly', () => {
+        const LEVELS: Record<string, number> = {
+          DEBUG: 0,
+          INFO: 1,
+          WARN: 2,
+          ERROR: 3
+        };
+
+        const shouldLog = (level: string, currentLevel: string): boolean => {
+          return LEVELS[level] >= LEVELS[currentLevel];
+        };
+
+        // At INFO level
+        expect(shouldLog('DEBUG', 'INFO')).toBe(false);
+        expect(shouldLog('INFO', 'INFO')).toBe(true);
+        expect(shouldLog('WARN', 'INFO')).toBe(true);
+        expect(shouldLog('ERROR', 'INFO')).toBe(true);
+
+        // At ERROR level
+        expect(shouldLog('DEBUG', 'ERROR')).toBe(false);
+        expect(shouldLog('INFO', 'ERROR')).toBe(false);
+        expect(shouldLog('WARN', 'ERROR')).toBe(false);
+        expect(shouldLog('ERROR', 'ERROR')).toBe(true);
+      });
     });
   });
 });

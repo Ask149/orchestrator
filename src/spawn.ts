@@ -12,8 +12,12 @@ import os from 'os';
 import path from 'path';
 import { buildEnrichedPrompt, summarizeOutput } from './context.js';
 import { getBackend, BackendRegistry } from './backends.js';
+import { logger } from './logger.js';
 import type { SubAgentTask, TaskResult, MCPConfig, CLIConfig, CLIBackendOptions } from './types.js';
 import { getRecommendedTimeout } from './types.js';
+
+// Active task tracking for graceful shutdown
+export const activeTasks = new Set<string>();
 
 // Configuration paths
 const IS_WINDOWS = process.platform === 'win32';
@@ -118,7 +122,7 @@ async function createFilteredMCPConfig(
     await writeFile(tempPath, JSON.stringify(filteredConfig, null, 2));
     return tempPath;
   } catch (error) {
-    console.error(`Failed to create filtered MCP config: ${error}`);
+    logger.warn('Failed to create filtered MCP config, using full config', { error: String(error) });
     return FULL_MCP_CONFIG;
   }
 }
@@ -151,7 +155,7 @@ async function logExecution(
 
     await appendFile(logFile, JSON.stringify(logEntry) + '\n');
   } catch (error) {
-    console.error(`Failed to log execution: ${error}`);
+    logger.warn('Failed to log execution', { error: String(error), taskId: task.id });
   }
 }
 
@@ -164,6 +168,9 @@ export async function spawnSubAgent(
   defaultTimeout: number,
   cliConfig?: CLIConfig
 ): Promise<TaskResult> {
+  // Track active task for graceful shutdown
+  activeTasks.add(task.id);
+  
   const startTime = Date.now();
   const workspace = task.workspace || defaultWorkspace;
   
@@ -178,7 +185,10 @@ export async function spawnSubAgent(
   const backendName = task.cli_backend || config.backend || 'copilot';
   const backend = getBackend(backendName);
   
+  logger.debug('Spawning sub-agent', { taskId: task.id, backend: backendName, timeout: timeout / 1000 });
+  
   if (!backend) {
+    activeTasks.delete(task.id);
     return {
       id: task.id,
       success: false,
@@ -292,6 +302,10 @@ export async function spawnSubAgent(
       // Log for audit
       await logExecution(task, result, finalPrompt, backendName);
 
+      // Remove from active tasks
+      activeTasks.delete(task.id);
+      logger.debug('Sub-agent completed', { taskId: task.id, success: result.success, duration: duration });
+
       resolve(result);
     });
 
@@ -314,9 +328,62 @@ export async function spawnSubAgent(
       };
 
       await logExecution(task, result, enrichedPrompt, backendName);
+      
+      // Remove from active tasks
+      activeTasks.delete(task.id);
+      logger.error('Sub-agent process error', { taskId: task.id, error: error.message });
+      
       resolve(result);
     });
   });
+}
+
+/**
+ * Check if an error is retryable (transient failure)
+ */
+function isRetryableError(result: TaskResult): boolean {
+  if (result.success) return false;
+  const error = result.error?.toLowerCase() || '';
+  return (
+    error.includes('timeout') ||
+    error.includes('etimedout') ||
+    error.includes('econnreset') ||
+    error.includes('econnrefused') ||
+    error.includes('spawn') // CLI not found temporarily
+  );
+}
+
+/**
+ * Spawn a sub-agent with simple retry for transient failures
+ */
+async function spawnWithRetry(
+  task: SubAgentTask,
+  defaultWorkspace: string,
+  defaultTimeout: number,
+  cliConfig: CLIConfig,
+  maxAttempts = 2
+): Promise<TaskResult> {
+  let lastResult: TaskResult | undefined;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    lastResult = await spawnSubAgent(task, defaultWorkspace, defaultTimeout, cliConfig);
+
+    // Success or non-retryable error: return immediately
+    if (lastResult.success || !isRetryableError(lastResult) || attempt === maxAttempts) {
+      return lastResult;
+    }
+
+    // Retryable error: wait and retry
+    logger.warn('Retrying sub-agent due to transient error', {
+      taskId: task.id,
+      attempt,
+      error: lastResult.error
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 2000)); // 2s fixed delay
+  }
+
+  return lastResult!;
 }
 
 /**
@@ -329,9 +396,9 @@ export async function spawnSubAgents(
 ): Promise<TaskResult[]> {
   // Load CLI config once for all tasks
   const cliConfig = await loadCLIConfig();
-  
+
   const promises = tasks.map((task) =>
-    spawnSubAgent(task, defaultWorkspace, defaultTimeout, cliConfig)
+    spawnWithRetry(task, defaultWorkspace, defaultTimeout, cliConfig)
   );
 
   // Use allSettled to continue even if some fail
@@ -342,6 +409,7 @@ export async function spawnSubAgents(
       return result.value;
     }
     // This shouldn't happen since spawnSubAgent handles errors internally
+    logger.error('Unexpected promise rejection', { taskId: tasks[index].id, error: result.reason?.message });
     return {
       id: tasks[index].id,
       success: false,
