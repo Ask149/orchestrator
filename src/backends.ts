@@ -30,6 +30,11 @@ export const CopilotBackend: CLIBackend = {
       args.push('--agent', options.agent);
     }
     
+    // MCP config for sub-agent tools (filesystem, playwright, etc.)
+    if (options.mcpConfigPath) {
+      args.push('--additional-mcp-config', options.mcpConfigPath);
+    }
+    
     // Prompt (programmatic mode)
     args.push('-p', prompt);
     
