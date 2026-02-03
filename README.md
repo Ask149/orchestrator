@@ -11,6 +11,36 @@ MCP server for spawning parallel sub-agents with multi-CLI backend support.
 - **Timeout handling** — Per-task and global timeouts
 - **Audit logging** — All executions logged to `~/.config/orchestrator/logs/`
 
+## Quick Demo
+
+**Spawn 3 parallel sub-agents for job research:**
+
+```bash
+# Via job-search-automation workspace
+cd /path/to/job-search-automation
+ma parallel \
+  "search LinkedIn for SDE-2 roles" \
+  "search Reddit for remote jobs" \
+  "research top companies for tech stack"
+```
+
+**Expected output:**
+```
+🐙 SPAWNING PARALLEL TASKS
+==========================
+
+Tasks (3 total):
+  1. search LinkedIn for SDE-2 roles
+  2. search Reddit for remote jobs
+  3. research top companies for tech stack
+
+⏳ Spawning sub-agents via Orchestrator...
+[Sub-Agent 1] LinkedIn search in progress...
+[Sub-Agent 2] Reddit search in progress...
+[Sub-Agent 3] Company research in progress...
+✅ Parallel execution complete
+```
+
 ## Installation
 
 **For detailed setup instructions, see [SETUP.md](SETUP.md).**
@@ -165,13 +195,25 @@ Define MCP servers available to sub-agents:
 
 ## MCP Integration
 
-### VS Code / Cline
+### Job Search Automation (Recommended)
+
+Use the `ma` CLI for integrated job search workflows:
+
+```bash
+cd /path/to/job-search-automation
+ma parallel "search LinkedIn for SDE-2" "search Reddit for remote jobs"
+```
+
+See [automation/ORCHESTRATOR.md](../job-search-automation/automation/ORCHESTRATOR.md) in job-search-automation workspace for complete usage guide with workflows and examples.
+
+### Standalone: VS Code / Cline
+
+Add to your MCP settings to use as a standalone server:
 
 ```json
 {
-  "servers": {
+  "mcpServers": {
     "orchestrator": {
-      "type": "stdio",
       "command": "node",
       "args": ["/path/to/orchestrator/dist/index.js"],
       "env": {
