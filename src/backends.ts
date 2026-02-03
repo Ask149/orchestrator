@@ -31,8 +31,9 @@ export const CopilotBackend: CLIBackend = {
     }
     
     // MCP config for sub-agent tools (filesystem, playwright, etc.)
+    // Copilot CLI requires @ prefix for file paths
     if (options.mcpConfigPath) {
-      args.push('--additional-mcp-config', options.mcpConfigPath);
+      args.push('--additional-mcp-config', `@${options.mcpConfigPath}`);
     }
     
     // Prompt (programmatic mode)
