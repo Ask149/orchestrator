@@ -7,12 +7,26 @@
   "bin": {
     "mcp-orchestrator": "dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ask149/orchestrator.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Ask149/orchestrator/issues"
+  },
+  "homepage": "https://github.com/Ask149/orchestrator#readme",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "prepublishOnly": "npm run build && npm test"
   },
   "keywords": ["mcp", "copilot", "orchestrator", "parallel", "subagents"],
   "author": "Ashish Kshirsagar",

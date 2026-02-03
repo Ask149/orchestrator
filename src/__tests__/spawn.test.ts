@@ -94,7 +94,7 @@ describe('Orchestrator Cross-Platform Compatibility', () => {
   });
 
   describe('Grep Implementation', () => {
-    it('should escape regex special chars', () => {
+    it('should escape regex special chars for literal matching', () => {
       const pattern = '[test] (value)';
       const escapeRegExp = (value: string) =>
         value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -102,9 +102,11 @@ describe('Orchestrator Cross-Platform Compatibility', () => {
       const escaped = escapeRegExp(pattern);
       const regex = new RegExp(escaped, 'i');
 
+      // Escaped pattern matches the literal string
       expect(regex.test('[test] (value)')).toBe(true);
-      expect(regex.test('TEST VALUE')).toBe(true);
+      expect(regex.test('[TEST] (VALUE)')).toBe(true); // case insensitive
       expect(regex.test('other')).toBe(false);
+      expect(regex.test('test value')).toBe(false); // no brackets = no match
     });
 
     it('should handle invalid regex gracefully', () => {
