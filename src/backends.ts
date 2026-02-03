@@ -25,12 +25,11 @@ export const CopilotBackend: CLIBackend = {
   buildArgs(prompt: string, options: CLIBackendOptions): string[] {
     const args: string[] = [];
     
-    // Agent (required for job-search workflows)
-    if (options.agent) {
-      args.push('--agent', options.agent);
-    }
+    // Note: We intentionally DON'T pass --agent for sub-agents
+    // Custom agents have restricted tool sets (e.g., only report_intent, update_todo)
+    // Without --agent, sub-agents get full built-in tools (bash, view, edit, create, grep)
     
-    // MCP config for sub-agent tools (filesystem, playwright, etc.)
+    // MCP config for additional MCP servers (optional)
     // Copilot CLI requires @ prefix for file paths
     if (options.mcpConfigPath) {
       args.push('--additional-mcp-config', `@${options.mcpConfigPath}`);
@@ -42,6 +41,8 @@ export const CopilotBackend: CLIBackend = {
     // Auto-approve tools for autonomous execution
     if (options.allowAllTools !== false) {
       args.push('--allow-all-tools');
+      // Also allow access to all file paths for sub-agent autonomy
+      args.push('--allow-all-paths');
     }
     
     // Model selection
