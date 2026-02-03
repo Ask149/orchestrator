@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs and metrics
+*.log
+logs/
+npm-debug.log*
+
+# Temporary files
+tmp/
+temp/
+.cache/
+
+# OS-specific
+.DS_Store
+Thumbs.db
