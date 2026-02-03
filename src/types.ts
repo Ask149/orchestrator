@@ -27,6 +27,7 @@ export interface CLIBackendOptions {
   mcpConfigPath?: string | null;
   agent?: string;
   allowAllTools?: boolean;
+  allowAllPaths?: boolean;
   maxTurns?: number;
   model?: string;
 }
@@ -66,6 +67,7 @@ export interface CopilotCLIConfig {
   agent?: string;         // Default agent to use
   model?: string;         // Model selection
   allowAllTools?: boolean;
+  allowAllPaths?: boolean;
 }
 
 export interface ClaudeCLIConfig {

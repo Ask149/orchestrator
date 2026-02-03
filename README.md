@@ -2,6 +2,14 @@
 
 MCP server for spawning parallel sub-agents with multi-CLI backend support.
 
+## Platform Support
+
+- **macOS** (Intel & Apple Silicon)
+- **Linux** (x86-64 & ARM64)
+- **Windows** (x64 & ARM64)
+
+**Windows setup:** See [WINDOWS_VALIDATION.md](WINDOWS_VALIDATION.md)
+
 ## Features
 
 - **Multi-CLI backends** — Support for GitHub Copilot CLI and Claude Code CLI
@@ -56,10 +64,13 @@ npm run build
 
 ## Configuration
 
-Config files live at `~/.config/orchestrator/`:
+Config files live at:
+
+- **macOS/Linux:** `~/.config/orchestrator/`
+- **Windows:** `%LOCALAPPDATA%\\orchestrator\\` (falls back to `%APPDATA%`)
 
 ```
-~/.config/orchestrator/
+<config-dir>/
 ├── config.json          # CLI backend configuration
 ├── mcp-subagent.json    # MCP servers available to sub-agents
 └── logs/                # Execution audit logs (JSONL)
@@ -73,15 +84,15 @@ Config files live at `~/.config/orchestrator/`:
     "backend": "copilot",
     
     "copilot": {
-      "command": "/opt/homebrew/bin/copilot",
-      "allowAllTools": true,
-      "allowAllPaths": true,
+      "command": "copilot",
+      "allowAllTools": false,
+      "allowAllPaths": false,
       "model": null
     },
     
     "claude": {
       "command": "claude",
-      "allowAllTools": true,
+      "allowAllTools": false,
       "maxTurns": 10,
       "model": null
     }
@@ -89,12 +100,14 @@ Config files live at `~/.config/orchestrator/`:
 }
 ```
 
+Defaults are secure: `allowAllTools` and `allowAllPaths` are `false`. Enable explicitly for unattended runs.
+
 ### Supported CLI Backends
 
 | Backend | CLI | Description |
 |---------|-----|-------------|
-| `copilot` | GitHub Copilot CLI | `copilot -p "prompt" --allow-all-tools --allow-all-paths` |
-| `claude` | Claude Code CLI | `claude -p "prompt" --dangerously-skip-permissions --output-format stream-json` |
+| `copilot` | GitHub Copilot CLI | `copilot -p "prompt" [--allow-all-tools] [--allow-all-paths]` |
+| `claude` | Claude Code CLI | `claude -p "prompt" [--dangerously-skip-permissions] --output-format stream-json` |
 
 > **Note:** Sub-agents run **without** the `--agent` flag. Custom agents restrict the available toolset (e.g., to only `report_intent`, `update_todo`). By omitting `--agent`, sub-agents get full access to Copilot's built-in tools: `bash`, `view`, `edit`, `create`, `grep`.
 
@@ -102,7 +115,7 @@ Config files live at `~/.config/orchestrator/`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `COPILOT_CLI` | `/opt/homebrew/bin/copilot` | Path to Copilot CLI |
+| `COPILOT_CLI` | `copilot` | Path to Copilot CLI |
 | `CLAUDE_CLI` | `claude` | Path to Claude Code CLI |
 
 ### Smart Timeout Configuration
@@ -243,7 +256,7 @@ Add to your MCP settings to use as a standalone server:
 
 ## Audit Logs
 
-Execution logs are written to `~/.config/orchestrator/logs/YYYY-MM-DD.jsonl`:
+Execution logs are written to `<config-dir>/logs/YYYY-MM-DD.jsonl`:
 
 ```jsonl
 {"timestamp":"2026-02-01T10:00:00.000Z","task_id":"stripe","backend":"copilot","success":true,"duration_ms":5432}
@@ -260,7 +273,24 @@ npm run watch
 
 # Type check
 npx tsc --noEmit
+
+# Run smoke tests
+npm test
+
+# Watch tests
+npm test:watch
 ```
+
+## Testing
+
+Cross-platform smoke tests validate:
+- Config path resolution (macOS/Linux/Windows)
+- Temp file handling
+- Secure permission defaults
+- Grep implementation (no Unix deps)
+- Platform-specific spawn behavior
+
+Run tests with: `npm test`
 
 ## License
 

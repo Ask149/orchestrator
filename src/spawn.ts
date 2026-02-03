@@ -8,6 +8,7 @@
 
 import { spawn } from 'child_process';
 import { writeFile, unlink, mkdir, appendFile, readFile } from 'fs/promises';
+import os from 'os';
 import path from 'path';
 import { buildEnrichedPrompt, summarizeOutput } from './context.js';
 import { getBackend, BackendRegistry } from './backends.js';
@@ -15,28 +16,48 @@ import type { SubAgentTask, TaskResult, MCPConfig, CLIConfig, CLIBackendOptions 
 import { getRecommendedTimeout } from './types.js';
 
 // Configuration paths
-const CONFIG_DIR = path.join(process.env.HOME || '', '.config/orchestrator');
+const IS_WINDOWS = process.platform === 'win32';
+const HOME_DIR = os.homedir();
+const WINDOWS_CONFIG_BASE = process.env.LOCALAPPDATA || process.env.APPDATA || HOME_DIR;
+const CONFIG_DIR = IS_WINDOWS
+  ? path.join(WINDOWS_CONFIG_BASE, 'orchestrator')
+  : path.join(HOME_DIR, '.config', 'orchestrator');
 const FULL_MCP_CONFIG = path.join(CONFIG_DIR, 'mcp-subagent.json');
 const CLI_CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 const LOG_DIR = path.join(CONFIG_DIR, 'logs');
+const TEMP_DIR = os.tmpdir();
 
 // Environment overrides
 const ENV_COPILOT_CLI = process.env.COPILOT_CLI;
 const ENV_CLAUDE_CLI = process.env.CLAUDE_CLI;
+const ENV_DEFAULT_BACKEND = process.env.ORCHESTRATOR_DEFAULT_BACKEND;
+
+function isTempPath(filePath: string): boolean {
+  const tempRoot = path.resolve(TEMP_DIR);
+  const target = path.resolve(filePath);
+  return target.startsWith(`${tempRoot}${path.sep}`);
+}
 
 /**
  * Load CLI configuration from config.json
  */
 async function loadCLIConfig(): Promise<CLIConfig> {
+  const defaultBackend = ENV_DEFAULT_BACKEND === 'claude' ? 'claude' : 'copilot';
+
   try {
     const content = await readFile(CLI_CONFIG_PATH, 'utf-8');
     const config = JSON.parse(content);
-    return config.cli || { backend: 'copilot', copilot: { agent: 'job-search' } };
+    return config.cli || {
+      backend: defaultBackend,
+      copilot: { agent: 'job-search', allowAllTools: false, allowAllPaths: false },
+      claude: { allowAllTools: false }
+    };
   } catch {
-    // Default configuration
+    // Default configuration (secure-by-default)
     return {
-      backend: 'copilot',
-      copilot: { agent: 'job-search', allowAllTools: true }
+      backend: defaultBackend,
+      copilot: { agent: 'job-search', allowAllTools: false, allowAllPaths: false },
+      claude: { allowAllTools: false }
     };
   }
 }
@@ -93,7 +114,7 @@ async function createFilteredMCPConfig(
     }
 
     // Write temp config
-    const tempPath = `/tmp/mcp_${taskId}_${Date.now()}.json`;
+    const tempPath = path.join(TEMP_DIR, `mcp_${taskId}_${Date.now()}.json`);
     await writeFile(tempPath, JSON.stringify(filteredConfig, null, 2));
     return tempPath;
   } catch (error) {
@@ -184,13 +205,16 @@ export async function spawnSubAgent(
   // Get CLI command
   const cliCommand = getCLICommand(backendName, config);
   
+  const copilotAllowAllTools = config.copilot?.allowAllTools === true;
+  const copilotAllowAllPaths = config.copilot?.allowAllPaths === true;
+  const claudeAllowAllTools = config.claude?.allowAllTools === true;
+
   // Build backend-specific options
   const backendOptions: CLIBackendOptions = {
     mcpConfigPath,
     agent: backendName === 'copilot' ? (config.copilot?.agent || 'job-search') : undefined,
-    allowAllTools: backendName === 'copilot' 
-      ? config.copilot?.allowAllTools !== false 
-      : config.claude?.allowAllTools !== false,
+    allowAllTools: backendName === 'copilot' ? copilotAllowAllTools : claudeAllowAllTools,
+    allowAllPaths: backendName === 'copilot' ? copilotAllowAllPaths : undefined,
     model: backendName === 'copilot' ? config.copilot?.model : config.claude?.model,
     maxTurns: backendName === 'claude' ? config.claude?.maxTurns : undefined
   };
@@ -207,7 +231,8 @@ export async function spawnSubAgent(
     const proc = spawn(cliCommand, args, {
       cwd: workspace,
       env,
-      timeout
+      timeout,
+      shell: IS_WINDOWS
     });
 
     const timeoutHandle = setTimeout(() => {
@@ -228,7 +253,7 @@ export async function spawnSubAgent(
       const duration = Date.now() - startTime;
 
       // Clean up temp MCP config
-      if (mcpConfigPath && mcpConfigPath.startsWith('/tmp/')) {
+      if (mcpConfigPath && isTempPath(mcpConfigPath)) {
         unlink(mcpConfigPath).catch(() => {});
       }
 
@@ -275,7 +300,7 @@ export async function spawnSubAgent(
       const duration = Date.now() - startTime;
 
       // Clean up temp MCP config on error too
-      if (mcpConfigPath && mcpConfigPath.startsWith('/tmp/')) {
+      if (mcpConfigPath && isTempPath(mcpConfigPath)) {
         unlink(mcpConfigPath).catch(() => {});
       }
 

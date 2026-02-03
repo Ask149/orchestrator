@@ -12,7 +12,8 @@
 
 ```bash
 npm install -g @github/copilot-cli
-# or with Homebrew
+
+# macOS (Homebrew)
 brew install copilot-cli
 ```
 
@@ -25,7 +26,8 @@ copilot --version
 
 ```bash
 npm install -g @anthropic-ai/claude-code
-# or with brew
+
+# macOS (Homebrew)
 brew install anthropic-ai/packages/claude-code
 ```
 
@@ -60,10 +62,14 @@ npm run build
 Create the configuration directory:
 
 ```bash
+# macOS/Linux
 mkdir -p ~/.config/orchestrator
+
+# Windows (PowerShell)
+New-Item -ItemType Directory -Force $env:LOCALAPPDATA\orchestrator
 ```
 
-Create `~/.config/orchestrator/config.json`:
+Create `<config-dir>/config.json`:
 
 ```json
 {
@@ -71,15 +77,16 @@ Create `~/.config/orchestrator/config.json`:
     "backend": "copilot",
     
     "copilot": {
-      "command": "/opt/homebrew/bin/copilot",
+      "command": "copilot",
       "agent": "job-search",
-      "allowAllTools": true,
+      "allowAllTools": false,
+      "allowAllPaths": false,
       "model": null
     },
     
     "claude": {
       "command": "claude",
-      "allowAllTools": true,
+      "allowAllTools": false,
       "maxTurns": 10,
       "model": null
     }
@@ -87,13 +94,15 @@ Create `~/.config/orchestrator/config.json`:
 }
 ```
 
+Defaults are secure; set `allowAllTools` / `allowAllPaths` to `true` only when you want unattended runs.
+
 **Note:** Adjust CLI paths based on your installation:
 - **Copilot**: Run `which copilot` to find your installation path
 - **Claude**: Usually available as `claude` command if installed globally
 
 ### 5. Optional: Configure MCP Servers
 
-Create `~/.config/orchestrator/mcp-subagent.json` to define MCP servers available to sub-agents:
+Create `<config-dir>/mcp-subagent.json` to define MCP servers available to sub-agents:
 
 ```json
 {
@@ -203,8 +212,12 @@ which copilot
 Ensure the log directory exists and is writable:
 
 ```bash
+# macOS/Linux
 mkdir -p ~/.config/orchestrator/logs
 chmod 755 ~/.config/orchestrator/logs
+
+# Windows (PowerShell)
+New-Item -ItemType Directory -Force $env:LOCALAPPDATA\orchestrator\logs
 ```
 
 ### Port Already in Use

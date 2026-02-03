@@ -27,29 +27,17 @@ const BROWSER_AUTOMATION_FALLBACK = `
 ## Browser Automation (No MCP Tools Available)
 
 You do NOT have browser_navigate or browser_snapshot MCP tools.
-Use npm playwright directly with bash commands:
+Use Node + Playwright directly (cross-platform):
 
 \`\`\`bash
-# Create and run Playwright script
-cat > /tmp/browser_task.js << 'SCRIPT'
-const { chromium } = require('playwright');
-(async () => {
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-  await page.goto('YOUR_URL');
-  console.log('Title:', await page.title());
-  console.log('Content:', await page.content().then(c => c.slice(0, 2000)));
-  await browser.close();
-})();
-SCRIPT
-cd ~ && node browser_task.js
+node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch({ headless: true }); const page = await browser.newPage(); await page.goto('YOUR_URL'); console.log('Title:', await page.title()); const content = await page.content(); console.log('Content:', content.slice(0, 2000)); await browser.close(); })().catch(err => { console.error(err); process.exit(1); });"
 \`\`\`
 `;
 
 export const CopilotBackend: CLIBackend = {
   name: 'copilot',
   
-  defaultCommand: '/opt/homebrew/bin/copilot',
+  defaultCommand: 'copilot',
   
   /**
    * Augment prompt with MCP fallback instructions if browser automation is needed
@@ -78,9 +66,12 @@ export const CopilotBackend: CLIBackend = {
     args.push('-p', prompt);
     
     // Auto-approve tools for autonomous execution
-    if (options.allowAllTools !== false) {
+    if (options.allowAllTools) {
       args.push('--allow-all-tools');
-      // Also allow access to all file paths for sub-agent autonomy
+    }
+
+    // Allow access to all file paths for sub-agent autonomy
+    if (options.allowAllPaths) {
       args.push('--allow-all-paths');
     }
     
@@ -146,7 +137,7 @@ export const ClaudeBackend: CLIBackend = {
     }
     
     // Skip permissions for autonomous execution
-    if (options.allowAllTools !== false) {
+    if (options.allowAllTools) {
       args.push('--dangerously-skip-permissions');
     }
     
@@ -231,13 +222,15 @@ export function loadCLIConfig(configPath: string): Promise<CLIConfig> {
       const config = JSON.parse(content);
       return config.cli || {
         backend: 'copilot',
-        copilot: { agent: 'job-search' }
+        copilot: { agent: 'job-search', allowAllTools: false, allowAllPaths: false },
+        claude: { allowAllTools: false }
       };
     } catch {
       // Default to copilot if config not found
       return {
         backend: 'copilot',
-        copilot: { agent: 'job-search' }
+        copilot: { agent: 'job-search', allowAllTools: false, allowAllPaths: false },
+        claude: { allowAllTools: false }
       };
     }
   });

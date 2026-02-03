@@ -3,9 +3,20 @@
  */
 
 import { readFile } from 'fs/promises';
-import { execSync } from 'child_process';
 import path from 'path';
 import type { TaskContext, FileContext } from './types.js';
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function buildSearchRegex(pattern: string): RegExp {
+  try {
+    return new RegExp(pattern, 'i');
+  } catch {
+    return new RegExp(escapeRegExp(pattern), 'i');
+  }
+}
 
 /**
  * Read a file with the specified mode
@@ -49,15 +60,20 @@ async function readFileWithMode(
         if (!fileCtx.pattern) {
           return `${fileCtx.path}: [grep mode requires pattern]`;
         }
-        try {
-          const result = execSync(
-            `grep -i "${fileCtx.pattern}" "${fullPath}" | head -20`,
-            { encoding: 'utf-8', timeout: 5000 }
-          );
-          return `${fileCtx.path} (grep "${fileCtx.pattern}"):\n${result.trim() || '[no matches]'}`;
-        } catch {
-          return `${fileCtx.path} (grep "${fileCtx.pattern}"): [no matches]`;
+
+        const content = await readFile(fullPath, 'utf-8');
+        const lines = content.split('\n');
+        const regex = buildSearchRegex(fileCtx.pattern);
+        const matches: string[] = [];
+
+        for (const line of lines) {
+          if (regex.test(line)) {
+            matches.push(line);
+            if (matches.length >= 20) break;
+          }
         }
+
+        return `${fileCtx.path} (grep "${fileCtx.pattern}"):\n${matches.length > 0 ? matches.join('\n') : '[no matches]'}`;
       }
 
       default:
