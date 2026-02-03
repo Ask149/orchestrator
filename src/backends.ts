@@ -29,11 +29,10 @@ export const CopilotBackend: CLIBackend = {
     // Custom agents have restricted tool sets (e.g., only report_intent, update_todo)
     // Without --agent, sub-agents get full built-in tools (bash, view, edit, create, grep)
     
-    // MCP config for additional MCP servers (optional)
-    // Copilot CLI requires @ prefix for file paths
-    if (options.mcpConfigPath) {
-      args.push('--additional-mcp-config', `@${options.mcpConfigPath}`);
-    }
+    // Note: We DON'T pass --additional-mcp-config because:
+    // 1. Copilot CLI has strict schema validation that rejects our filtered configs
+    // 2. Sub-agents automatically inherit MCP servers from ~/.copilot/mcp-config.json
+    // The mcp_servers filter in tasks is informational only (for logging/auditing)
     
     // Prompt (programmatic mode)
     args.push('-p', prompt);
@@ -53,12 +52,9 @@ export const CopilotBackend: CLIBackend = {
     return args;
   },
   
-  buildEnv(mcpConfigPath: string | null, baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-    return {
-      ...baseEnv,
-      // Copilot CLI reads MCP config from ~/.copilot/ or COPILOT_MCP_CONFIG
-      ...(mcpConfigPath && { COPILOT_MCP_CONFIG: mcpConfigPath })
-    };
+  buildEnv(_mcpConfigPath: string | null, baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+    // Sub-agents inherit MCP config from ~/.copilot/mcp-config.json automatically
+    return { ...baseEnv };
   },
   
   parseOutput(stdout: string, _stderr: string, _exitCode: number): ParsedOutput {

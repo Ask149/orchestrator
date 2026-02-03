@@ -66,15 +66,13 @@ function getCLICommand(backendName: string, cliConfig: CLIConfig): string {
 
 /**
  * Create filtered MCP config for specific servers
- * Returns null if no servers specified (sub-agents have built-in tools: bash, view, edit, create, grep)
  */
 async function createFilteredMCPConfig(
   servers: string[] | undefined,
   taskId: string
 ): Promise<string | null> {
-  // No MCP servers requested - sub-agents will use built-in Copilot CLI tools
   if (!servers || servers.length === 0) {
-    return null;
+    return FULL_MCP_CONFIG;
   }
 
   try {
