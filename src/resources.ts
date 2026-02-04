@@ -9,6 +9,7 @@
 import { readFile, access, constants } from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import { logger } from './logger.js';
 
 // Cross-platform config dir (matches logger.ts)
 const IS_WINDOWS = process.platform === 'win32';
@@ -46,12 +47,15 @@ export const AVAILABLE_RESOURCES: ResourceDefinition[] = [
  */
 export async function getLogResource(): Promise<{ content: string; found: boolean }> {
   const logFile = path.join(LOG_DIR, 'orchestrator.jsonl');
+  logger.debug('Reading log resource', { logFile });
   
   try {
     await access(logFile, constants.R_OK);
     const content = await readFile(logFile, 'utf-8');
+    logger.debug('Log resource read successfully', { size: content.length, lines: content.split('\n').length });
     return { content, found: true };
-  } catch {
+  } catch (error) {
+    logger.debug('Log file not found or not readable', { logFile, error: String(error) });
     return {
       content: JSON.stringify({
         message: 'Log file not found or not readable',
@@ -70,6 +74,8 @@ export async function getConfigResource(): Promise<{ content: string; found: boo
   const configFile = path.join(CONFIG_DIR, 'config.json');
   const mcpConfigFile = path.join(CONFIG_DIR, 'mcp-subagent.json');
   
+  logger.debug('Reading config resource', { configFile, mcpConfigFile });
+  
   let hasMainConfig = false;
   let hasMcpConfig = false;
   
@@ -84,7 +90,10 @@ export async function getConfigResource(): Promise<{ content: string; found: boo
     const content = await readFile(configFile, 'utf-8');
     result.cliConfig = JSON.parse(content);
     hasMainConfig = true;
-  } catch {
+    const cliSection = (result.cliConfig as Record<string, unknown>)?.cli as Record<string, unknown> | undefined;
+    logger.debug('Main config loaded', { path: configFile, backend: cliSection?.backend });
+  } catch (error) {
+    logger.debug('Main config not found', { path: configFile, error: String(error) });
     result.cliConfig = {
       error: 'Config file not found',
       expectedPath: configFile
@@ -97,7 +106,10 @@ export async function getConfigResource(): Promise<{ content: string; found: boo
     const content = await readFile(mcpConfigFile, 'utf-8');
     result.mcpServers = JSON.parse(content);
     hasMcpConfig = true;
-  } catch {
+    const serverNames = Object.keys((result.mcpServers as Record<string, unknown>)?.mcpServers || {});
+    logger.debug('MCP config loaded', { path: mcpConfigFile, serverCount: serverNames.length, servers: serverNames });
+  } catch (error) {
+    logger.debug('MCP config not found', { path: mcpConfigFile, error: String(error) });
     result.mcpServers = {
       error: 'MCP config file not found',
       expectedPath: mcpConfigFile
@@ -112,6 +124,12 @@ export async function getConfigResource(): Promise<{ content: string; found: boo
     COPILOT_CLI: process.env.COPILOT_CLI || '(not set, defaults to copilot)',
     CLAUDE_CLI: process.env.CLAUDE_CLI || '(not set, defaults to claude)'
   };
+
+  logger.debug('Config resource assembled', {
+    hasMainConfig,
+    hasMcpConfig,
+    platform: result.platform
+  });
   
   return {
     content: JSON.stringify(result, null, 2),
@@ -123,14 +141,20 @@ export async function getConfigResource(): Promise<{ content: string; found: boo
  * Read a resource by URI
  */
 export async function readResource(uri: string): Promise<{ content: string; mimeType: string }> {
+  logger.debug('Reading resource', { uri });
+  
   switch (uri) {
-    case 'logs://orchestrator/app':
+    case 'logs://orchestrator/app': {
       const logs = await getLogResource();
+      logger.debug('Returning log resource', { found: logs.found, size: logs.content.length });
       return { content: logs.content, mimeType: 'application/jsonl' };
+    }
       
-    case 'config://orchestrator/current':
+    case 'config://orchestrator/current': {
       const config = await getConfigResource();
+      logger.debug('Returning config resource', { found: config.found, size: config.content.length });
       return { content: config.content, mimeType: 'application/json' };
+    }
       
     default:
       throw new Error(`Unknown resource URI: ${uri}`);

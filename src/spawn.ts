@@ -47,17 +47,26 @@ function isTempPath(filePath: string): boolean {
  */
 async function loadCLIConfig(): Promise<CLIConfig> {
   const defaultBackend = ENV_DEFAULT_BACKEND === 'claude' ? 'claude' : 'copilot';
+  logger.debug('Loading CLI config', { path: CLI_CONFIG_PATH, defaultBackend });
 
   try {
     const content = await readFile(CLI_CONFIG_PATH, 'utf-8');
     const config = JSON.parse(content);
-    return config.cli || {
+    const cliConfig = config.cli || {
       backend: defaultBackend,
       copilot: { agent: 'job-search', allowAllTools: false, allowAllPaths: false },
       claude: { allowAllTools: false }
     };
-  } catch {
+    logger.debug('CLI config loaded successfully', {
+      backend: cliConfig.backend,
+      copilotAllowAllTools: cliConfig.copilot?.allowAllTools,
+      copilotAllowAllPaths: cliConfig.copilot?.allowAllPaths,
+      claudeAllowAllTools: cliConfig.claude?.allowAllTools
+    });
+    return cliConfig;
+  } catch (error) {
     // Default configuration (secure-by-default)
+    logger.debug('CLI config not found or invalid, using defaults', { error: String(error) });
     return {
       backend: defaultBackend,
       copilot: { agent: 'job-search', allowAllTools: false, allowAllPaths: false },
@@ -75,19 +84,29 @@ function getCLICommand(backendName: string, cliConfig: CLIConfig): string {
     throw new Error(`Unknown CLI backend: ${backendName}`);
   }
 
+  let command: string;
+  let source: string;
+
   // Check environment override first
-  if (backendName === 'copilot' && ENV_COPILOT_CLI) return ENV_COPILOT_CLI;
-  if (backendName === 'claude' && ENV_CLAUDE_CLI) return ENV_CLAUDE_CLI;
-
-  // Check config override
-  if (backendName === 'copilot' && cliConfig.copilot?.command) {
-    return cliConfig.copilot.command;
+  if (backendName === 'copilot' && ENV_COPILOT_CLI) {
+    command = ENV_COPILOT_CLI;
+    source = 'COPILOT_CLI env var';
+  } else if (backendName === 'claude' && ENV_CLAUDE_CLI) {
+    command = ENV_CLAUDE_CLI;
+    source = 'CLAUDE_CLI env var';
+  } else if (backendName === 'copilot' && cliConfig.copilot?.command) {
+    command = cliConfig.copilot.command;
+    source = 'config.json copilot.command';
+  } else if (backendName === 'claude' && cliConfig.claude?.command) {
+    command = cliConfig.claude.command;
+    source = 'config.json claude.command';
+  } else {
+    command = backend.defaultCommand;
+    source = 'backend default';
   }
-  if (backendName === 'claude' && cliConfig.claude?.command) {
-    return cliConfig.claude.command;
-  }
 
-  return backend.defaultCommand;
+  logger.debug('Resolved CLI command', { backend: backendName, command, source });
+  return command;
 }
 
 /**
@@ -97,32 +116,83 @@ async function createFilteredMCPConfig(
   servers: string[] | undefined,
   taskId: string
 ): Promise<string | null> {
+  logger.debug('Creating MCP config', {
+    taskId,
+    requestedServers: servers,
+    fullConfigPath: FULL_MCP_CONFIG
+  });
+
   if (!servers || servers.length === 0) {
+    logger.debug('No specific servers requested, using full MCP config', { path: FULL_MCP_CONFIG });
     return FULL_MCP_CONFIG;
   }
 
   try {
     const { readFile } = await import('fs/promises');
-    const fullConfig: MCPConfig = JSON.parse(
-      await readFile(FULL_MCP_CONFIG, 'utf-8')
-    );
+    const configContent = await readFile(FULL_MCP_CONFIG, 'utf-8');
+    const fullConfig: MCPConfig = JSON.parse(configContent);
+    const availableServers = Object.keys(fullConfig.mcpServers || {});
+
+    logger.debug('Full MCP config loaded', {
+      availableServers,
+      requestedServers: servers
+    });
 
     const filteredConfig: MCPConfig = {
       mcpServers: {}
     };
 
+    const foundServers: string[] = [];
+    const missingServers: string[] = [];
+
     for (const server of servers) {
       if (fullConfig.mcpServers[server]) {
         filteredConfig.mcpServers[server] = fullConfig.mcpServers[server];
+        foundServers.push(server);
+        // Cast to access optional fields like 'type' that may exist in actual config
+        const serverConfig = fullConfig.mcpServers[server] as unknown as Record<string, unknown>;
+        logger.debug('MCP server found and included', {
+          server,
+          type: serverConfig.type,
+          command: serverConfig.command,
+          args: serverConfig.args
+        });
+      } else {
+        missingServers.push(server);
+        logger.warn('MCP server not found in config', {
+          server,
+          availableServers,
+          configPath: FULL_MCP_CONFIG
+        });
       }
+    }
+
+    if (missingServers.length > 0) {
+      logger.warn('Some requested MCP servers not available', {
+        missing: missingServers,
+        found: foundServers,
+        hint: 'Add missing servers to mcp-subagent.json'
+      });
     }
 
     // Write temp config
     const tempPath = path.join(TEMP_DIR, `mcp_${taskId}_${Date.now()}.json`);
-    await writeFile(tempPath, JSON.stringify(filteredConfig, null, 2));
+    const filteredContent = JSON.stringify(filteredConfig, null, 2);
+    await writeFile(tempPath, filteredContent);
+
+    logger.debug('Filtered MCP config written', {
+      tempPath,
+      includedServers: foundServers,
+      configSize: filteredContent.length
+    });
+
     return tempPath;
   } catch (error) {
-    logger.warn('Failed to create filtered MCP config, using full config', { error: String(error) });
+    logger.warn('Failed to create filtered MCP config, using full config', {
+      error: String(error),
+      fullConfigPath: FULL_MCP_CONFIG,
+      hint: 'Ensure mcp-subagent.json exists and is valid JSON'
+    });
     return FULL_MCP_CONFIG;
   }
 }
@@ -237,10 +307,30 @@ export async function spawnSubAgent(
   // For .exe files, shell: true mangles arguments with special characters
   const needsShell = IS_WINDOWS && /\.(bat|cmd)$/i.test(cliCommand);
 
+  logger.debug('Spawning CLI process', {
+    taskId: task.id,
+    command: cliCommand,
+    argsCount: args.length,
+    argsSummary: args.slice(0, 3).map(a => a.length > 50 ? a.slice(0, 50) + '...' : a),
+    workspace,
+    timeout: timeout / 1000,
+    shell: needsShell,
+    mcpConfigPath,
+    platform: process.platform
+  });
+
+  // Log full command for verbose debugging
+  logger.debug('Full CLI command', {
+    taskId: task.id,
+    fullCommand: `${cliCommand} ${args.map(a => a.includes(' ') ? `"${a}"` : a).join(' ')}`.slice(0, 500)
+  });
+
   return new Promise<TaskResult>((resolve) => {
     let stdout = '';
     let stderr = '';
     let timedOut = false;
+    let stdoutChunks = 0;
+    let stderrChunks = 0;
 
     const proc = spawn(cliCommand, args, {
       cwd: workspace,
@@ -251,30 +341,90 @@ export async function spawnSubAgent(
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
+    logger.debug('CLI process spawned', { taskId: task.id, pid: proc.pid });
+
     const timeoutHandle = setTimeout(() => {
       timedOut = true;
+      logger.warn('CLI process timeout, sending SIGTERM', { taskId: task.id, pid: proc.pid, timeout: timeout / 1000 });
       proc.kill('SIGTERM');
     }, timeout);
 
     proc.stdout.on('data', (data) => {
-      stdout += data.toString();
+      const chunk = data.toString();
+      stdout += chunk;
+      stdoutChunks++;
+      if (stdoutChunks <= 5 || stdoutChunks % 10 === 0) {
+        logger.debug('CLI stdout chunk', {
+          taskId: task.id,
+          chunkNum: stdoutChunks,
+          chunkSize: chunk.length,
+          totalSize: stdout.length,
+          preview: chunk.slice(0, 200)
+        });
+      }
     });
 
     proc.stderr.on('data', (data) => {
-      stderr += data.toString();
+      const chunk = data.toString();
+      stderr += chunk;
+      stderrChunks++;
+      // Always log stderr as it often contains important error info
+      logger.debug('CLI stderr chunk', {
+        taskId: task.id,
+        chunkNum: stderrChunks,
+        chunkSize: chunk.length,
+        totalSize: stderr.length,
+        content: chunk.slice(0, 500)
+      });
     });
 
     proc.on('close', async (code) => {
       clearTimeout(timeoutHandle);
       const duration = Date.now() - startTime;
 
+      logger.debug('CLI process closed', {
+        taskId: task.id,
+        exitCode: code,
+        timedOut,
+        duration,
+        stdoutSize: stdout.length,
+        stderrSize: stderr.length,
+        stdoutChunks,
+        stderrChunks
+      });
+
+      // Log output summary for debugging
+      if (stdout.length > 0) {
+        logger.debug('CLI stdout summary', {
+          taskId: task.id,
+          size: stdout.length,
+          firstChars: stdout.slice(0, 300),
+          lastChars: stdout.length > 300 ? stdout.slice(-200) : undefined
+        });
+      }
+      if (stderr.length > 0) {
+        logger.debug('CLI stderr summary', {
+          taskId: task.id,
+          size: stderr.length,
+          content: stderr.slice(0, 1000)
+        });
+      }
+
       // Clean up temp MCP config
       if (mcpConfigPath && isTempPath(mcpConfigPath)) {
+        logger.debug('Cleaning up temp MCP config', { path: mcpConfigPath });
         unlink(mcpConfigPath).catch(() => {});
       }
 
       // Parse output using backend-specific parser
+      logger.debug('Parsing CLI output', { taskId: task.id, backend: backendName });
       const parsed = backend.parseOutput(stdout, stderr, code || 0);
+      logger.debug('Parsed output', {
+        taskId: task.id,
+        outputLength: parsed.output.length,
+        hasTokens: !!parsed.tokens,
+        tokens: parsed.tokens
+      });
 
       const result: TaskResult = timedOut
         ? {

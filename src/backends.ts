@@ -7,6 +7,7 @@
  */
 
 import type { CLIBackend, CLIBackendOptions, ParsedOutput, CLIConfig } from './types.js';
+import { logger } from './logger.js';
 
 /**
  * GitHub Copilot CLI Backend
@@ -91,6 +92,15 @@ export const CopilotBackend: CLIBackend = {
       args.push('--model', options.model);
     }
 
+    logger.debug('Copilot args built', {
+      argsCount: args.length,
+      mcpConfig: options.mcpConfigPath ? 'yes' : 'no',
+      allowAllTools: options.allowAllTools,
+      allowAllPaths: options.allowAllPaths,
+      model: options.model || 'default',
+      promptLength: prompt.length
+    });
+
     return args;
   },
 
@@ -110,6 +120,13 @@ export const CopilotBackend: CLIBackend = {
         out: parseInt(tokenMatch[2], 10)
       };
     }
+
+    logger.debug('Copilot output parsed', {
+      stdoutLength: stdout.length,
+      hasTokens: !!tokens,
+      tokens,
+      outputPreview: stdout.slice(0, 200)
+    });
 
     return {
       output: stdout.trim(),
@@ -166,6 +183,15 @@ export const ClaudeBackend: CLIBackend = {
       args.push('--model', options.model);
     }
 
+    logger.debug('Claude args built', {
+      argsCount: args.length,
+      mcpConfig: options.mcpConfigPath ? 'yes' : 'no',
+      allowAllTools: options.allowAllTools,
+      maxTurns: options.maxTurns,
+      model: options.model || 'default',
+      promptLength: prompt.length
+    });
+
     return args;
   },
 
@@ -175,6 +201,11 @@ export const ClaudeBackend: CLIBackend = {
 
   parseOutput(stdout: string, _stderr: string, _exitCode: number): ParsedOutput {
     // With text output format, stdout is plain text
+    logger.debug('Claude output parsed', {
+      stdoutLength: stdout.length,
+      outputPreview: stdout.slice(0, 200)
+    });
+
     return {
       output: stdout.trim(),
       tokens: undefined
