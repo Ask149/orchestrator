@@ -1,6 +1,6 @@
 /**
  * Sub-agent spawning logic with multi-CLI backend support
- * 
+ *
  * Supports:
  * - copilot: GitHub Copilot CLI
  * - claude: Claude Code CLI
@@ -74,11 +74,11 @@ function getCLICommand(backendName: string, cliConfig: CLIConfig): string {
   if (!backend) {
     throw new Error(`Unknown CLI backend: ${backendName}`);
   }
-  
+
   // Check environment override first
   if (backendName === 'copilot' && ENV_COPILOT_CLI) return ENV_COPILOT_CLI;
   if (backendName === 'claude' && ENV_CLAUDE_CLI) return ENV_CLAUDE_CLI;
-  
+
   // Check config override
   if (backendName === 'copilot' && cliConfig.copilot?.command) {
     return cliConfig.copilot.command;
@@ -86,7 +86,7 @@ function getCLICommand(backendName: string, cliConfig: CLIConfig): string {
   if (backendName === 'claude' && cliConfig.claude?.command) {
     return cliConfig.claude.command;
   }
-  
+
   return backend.defaultCommand;
 }
 
@@ -139,7 +139,7 @@ async function logExecution(
   try {
     await mkdir(LOG_DIR, { recursive: true });
     const logFile = path.join(LOG_DIR, `${new Date().toISOString().split('T')[0]}.jsonl`);
-    
+
     const logEntry = {
       timestamp: new Date().toISOString(),
       task_id: task.id,
@@ -170,23 +170,23 @@ export async function spawnSubAgent(
 ): Promise<TaskResult> {
   // Track active task for graceful shutdown
   activeTasks.add(task.id);
-  
+
   const startTime = Date.now();
   const workspace = task.workspace || defaultWorkspace;
-  
+
   // Smart timeout: use task override > MCP-recommended > default
   const recommendedTimeout = getRecommendedTimeout(task.mcp_servers);
   const timeout = (task.timeout_seconds || Math.max(recommendedTimeout, defaultTimeout)) * 1000;
 
   // Load CLI config if not provided
   const config = cliConfig || await loadCLIConfig();
-  
+
   // Determine which backend to use (task override > config default)
   const backendName = task.cli_backend || config.backend || 'copilot';
   const backend = getBackend(backendName);
-  
+
   logger.debug('Spawning sub-agent', { taskId: task.id, backend: backendName, timeout: timeout / 1000 });
-  
+
   if (!backend) {
     activeTasks.delete(task.id);
     return {
@@ -205,7 +205,7 @@ export async function spawnSubAgent(
   );
 
   // Augment prompt with MCP fallback instructions if backend supports it
-  const finalPrompt = backend.augmentPromptForMCP 
+  const finalPrompt = backend.augmentPromptForMCP
     ? backend.augmentPromptForMCP(enrichedPrompt, task.mcp_servers)
     : enrichedPrompt;
 
@@ -214,7 +214,7 @@ export async function spawnSubAgent(
 
   // Get CLI command
   const cliCommand = getCLICommand(backendName, config);
-  
+
   const copilotAllowAllTools = config.copilot?.allowAllTools === true;
   const copilotAllowAllPaths = config.copilot?.allowAllPaths === true;
   const claudeAllowAllTools = config.claude?.allowAllTools === true;
@@ -233,9 +233,9 @@ export async function spawnSubAgent(
   const args = backend.buildArgs(finalPrompt, backendOptions);
   const env = backend.buildEnv(mcpConfigPath, process.env as NodeJS.ProcessEnv);
 
-  // On Windows, only use shell for .bat/.cmd files (need for path resolution) 
+  // On Windows, only use shell for .bat/.cmd files (needed for path resolution)
   // For .exe files, shell: true mangles arguments with special characters
-  const needShell = IS_WINDOWS && /\.(bat|cmd)$/i.test(cliCommand);
+  const needsShell = IS_WINDOWS && /\.(bat|cmd)$/i.test(cliCommand);
 
   return new Promise<TaskResult>((resolve) => {
     let stdout = '';
@@ -246,7 +246,7 @@ export async function spawnSubAgent(
       cwd: workspace,
       env,
       timeout,
-      shell: needShell,
+      shell: needsShell,
       // Close stdin immediately - CLI tools don't need input, and Claude waits for stdin to close
       stdio: ['ignore', 'pipe', 'pipe']
     });
@@ -334,11 +334,11 @@ export async function spawnSubAgent(
       };
 
       await logExecution(task, result, enrichedPrompt, backendName);
-      
+
       // Remove from active tasks
       activeTasks.delete(task.id);
       logger.error('Sub-agent process error', { taskId: task.id, error: error.message });
-      
+
       resolve(result);
     });
   });

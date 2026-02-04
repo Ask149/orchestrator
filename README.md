@@ -209,22 +209,48 @@ Spawn parallel sub-agents for complex tasks.
 
 ## MCP Server Configuration (mcp-subagent.json)
 
-Define MCP servers available to sub-agents:
+Define MCP servers available to sub-agents.
+
+**Required fields for CLI compatibility:**
+
+| Field | Copilot CLI | Claude CLI | Description |
+|-------|-------------|------------|-------------|
+| `type` | **Required** | Optional | `"local"`, `"stdio"`, `"http"`, or `"sse"` |
+| `tools` | **Required** | Optional | Array of tool names or `["*"]` for all |
+| `command` | Required | Required | Executable path |
+| `args` | Required | Required | Command arguments |
+
+**macOS/Linux:**
 
 ```json
 {
   "mcpServers": {
     "playwright": {
+      "type": "local",
       "command": "npx",
-      "args": ["@anthropic-ai/mcp-playwright"]
-    },
-    "fetch": {
-      "command": "npx",
-      "args": ["@anthropic-ai/mcp-fetch"]
+      "args": ["-y", "@playwright/mcp@latest"],
+      "tools": ["*"]
     }
   }
 }
 ```
+
+**Windows (requires `cmd /c` wrapper for npx):**
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "type": "local",
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@playwright/mcp@latest"],
+      "tools": ["*"]
+    }
+  }
+}
+```
+
+> **Windows Users:** Without `cmd /c`, you'll encounter "Connection closed" errors because Windows cannot directly execute `npx`. See [WINDOWS_VALIDATION.md](WINDOWS_VALIDATION.md) for details.
 
 ## MCP Integration
 

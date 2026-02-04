@@ -67,6 +67,36 @@ For testing orchestrator on **Windows x64 and ARM64**.
 - [ ] Verify `--allow-all-tools` NOT added to Copilot args by default
 - [ ] Verify `--dangerously-skip-permissions` NOT added to Claude args by default
 
+### MCP Server Configuration (CRITICAL for Windows)
+
+Windows **requires** the `cmd /c` wrapper for `npx`-based MCP servers. Without it, you'll see "Connection closed" errors because Windows cannot directly execute `npx`.
+
+**Correct Windows format (`mcp-subagent.json`):**
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "type": "local",
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@playwright/mcp@latest"],
+      "tools": ["*"]
+    }
+  }
+}
+```
+
+**Required fields for Copilot CLI:**
+- [ ] `type` field present (`"local"`, `"stdio"`, `"http"`, or `"sse"`)
+- [ ] `tools` field present (`["*"]` for all tools)
+
+**Validation checklist:**
+- [ ] MCP config uses `"command": "cmd"` (not `"command": "npx"`)
+- [ ] MCP config uses `"args": ["/c", "npx", ...]` format
+- [ ] Test with Copilot: `copilot -p "list available tools" --additional-mcp-config @path\to\mcp-subagent.json`
+- [ ] Test with Claude: `claude -p "list available tools" --mcp-config path\to\mcp-subagent.json`
+- [ ] Both CLIs show MCP tools available (e.g., `browser_navigate`, `browser_snapshot`)
+
 ### Spawn / Process Execution
 
 - [ ] `spawn()` is called with `shell: true` on Windows
@@ -163,6 +193,7 @@ Expected: < 2 seconds (no significant slowdown vs macOS)
 | `/tmp/` not exist | ✓ Fixed | Uses `os.tmpdir()` |
 | `grep` command not found | ✓ Fixed | Node-based grep implementation |
 | Shell execution fails | ✓ Fixed | `shell: true` on Windows |
+| MCP `npx` "Connection closed" | ✓ Documented | Use `cmd /c npx` wrapper in config |
 
 ---
 

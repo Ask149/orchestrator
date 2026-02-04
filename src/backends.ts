@@ -1,6 +1,6 @@
 /**
  * CLI Backend Abstraction
- * 
+ *
  * Supports multiple CLI tools:
  * - copilot: GitHub Copilot CLI
  * - claude: Claude Code CLI
@@ -10,18 +10,16 @@ import type { CLIBackend, CLIBackendOptions, ParsedOutput, CLIConfig } from './t
 
 /**
  * GitHub Copilot CLI Backend
- * 
+ *
  * Flags:
  * - copilot -p "prompt" — Programmatic mode
  * - --agent <name> — Use custom agent
- * - --allow-all-tools — Auto-approve all tools (alias: --yolo)
- * - --allow-all-paths — Allow access to all file paths
- * - --yolo — Full bypass mode (2026), alias for --allow-all-tools
+ * - --allow-all-tools — Auto-approve all tools
  * - --model <model> — Specify model
  */
 /**
  * MCP Tool Fallback Instructions
- * 
+ *
  * Copilot CLI doesn't load MCP servers in non-interactive mode.
  * These instructions help sub-agents use npm packages directly as fallback.
  */
@@ -31,31 +29,16 @@ const BROWSER_AUTOMATION_FALLBACK = `
 You do NOT have browser_navigate or browser_snapshot MCP tools.
 Use Node + Playwright directly (cross-platform):
 
-### Basic (headless, no auth):
 \`\`\`bash
 node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch({ headless: true }); const page = await browser.newPage(); await page.goto('YOUR_URL'); console.log('Title:', await page.title()); const content = await page.content(); console.log('Content:', content.slice(0, 2000)); await browser.close(); })().catch(err => { console.error(err); process.exit(1); });"
 \`\`\`
-
-### With Authenticated Session (for Google/Gemini/etc):
-Use persistent browser context to reuse existing login sessions:
-\`\`\`bash
-node -e "const { chromium } = require('playwright'); const os = require('os'); const path = require('path'); (async () => { const userDataDir = path.join(os.homedir(), '.playwright-profile'); const browser = await chromium.launchPersistentContext(userDataDir, { headless: false }); const page = browser.pages()[0] || await browser.newPage(); await page.goto('YOUR_URL'); console.log('Title:', await page.title()); await browser.close(); })().catch(err => { console.error(err); process.exit(1); });"
-\`\`\`
-
-### Supported Sites Without Auth:
-- perplexity.ai — Full functionality without login
-- duckduckgo.com — Search without login
-
-### Sites Requiring Auth (use persistent context):
-- gemini.google.com — Requires Google sign-in
-- chatgpt.com — Requires OpenAI sign-in
 `;
 
 export const CopilotBackend: CLIBackend = {
   name: 'copilot',
-  
+
   defaultCommand: 'copilot',
-  
+
   /**
    * Augment prompt with MCP fallback instructions if browser automation is needed
    */
@@ -66,25 +49,30 @@ export const CopilotBackend: CLIBackend = {
     }
     return prompt;
   },
-  
+
   buildArgs(prompt: string, options: CLIBackendOptions): string[] {
     const args: string[] = [];
-    
+
     // Note: We intentionally DON'T pass --agent for sub-agents
     // Custom agents have restricted tool sets (e.g., only report_intent, update_todo)
     // Without --agent, sub-agents get full built-in tools (bash, view, edit, create, grep)
-    
-    // Note: We DON'T pass --additional-mcp-config because:
-    // 1. Copilot CLI has strict schema validation (rejects command/args format in non-interactive)
-    // 2. MCP servers require stdio communication that CLI doesn't set up automatically
-    // Solution: Augment prompts with npm package instructions as fallback
-    
+
     // Prompt (programmatic mode)
     args.push('-p', prompt);
 
-    // Silent mode for cleaner output (not stats)
+    // Silent mode for cleaner output (no stats)
     args.push('-s');
-    
+
+    // MCP config - pass additional MCP servers for this session
+    // Format: @<filepath> for file path
+    // Note: mcp-subagent.json must include:
+    //   - "type": "local" (or "stdio", "http", "sse") - REQUIRED for Copilot
+    //   - "tools": ["*"] or specific tool names - REQUIRED for Copilot
+    //   - Windows: Use "cmd" with args ["/c", "npx", ...] for npx commands
+    if (options.mcpConfigPath) {
+      args.push('--additional-mcp-config', `@${options.mcpConfigPath}`);
+    }
+
     // Auto-approve tools for autonomous execution
     if (options.allowAllTools) {
       args.push('--allow-all-tools');
@@ -94,20 +82,20 @@ export const CopilotBackend: CLIBackend = {
     if (options.allowAllPaths) {
       args.push('--allow-all-paths');
     }
-    
+
     // Model selection
     if (options.model) {
       args.push('--model', options.model);
     }
-    
+
     return args;
   },
-  
+
   buildEnv(_mcpConfigPath: string | null, baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     // Sub-agents inherit MCP config from ~/.copilot/mcp-config.json automatically
     return { ...baseEnv };
   },
-  
+
   parseOutput(stdout: string, _stderr: string, _exitCode: number): ParsedOutput {
     // Parse token usage if present (format: "123 in, 456 out")
     let tokens: { in: number; out: number } | undefined;
@@ -118,7 +106,7 @@ export const CopilotBackend: CLIBackend = {
         out: parseInt(tokenMatch[2], 10)
       };
     }
-    
+
     return {
       output: stdout.trim(),
       tokens
@@ -128,7 +116,7 @@ export const CopilotBackend: CLIBackend = {
 
 /**
  * Claude Code CLI Backend
- * 
+ *
  * Flags:
  * - claude -p "prompt" — Print mode (non-interactive)
  * - --output-format json — JSON output for parsing
@@ -139,41 +127,50 @@ export const CopilotBackend: CLIBackend = {
  */
 export const ClaudeBackend: CLIBackend = {
   name: 'claude',
-  
+
   defaultCommand: 'claude',
-  
+
   buildArgs(prompt: string, options: CLIBackendOptions): string[] {
     const args: string[] = [];
-    
+
     // Prompt (print mode for non-interactive)
     args.push('-p', prompt);
 
     // Use text output for simpler parsing
     args.push('--output-format', 'text');
-    
+
+    // MCP config - load additional MCP servers for this session
+    // Note: Claude CLI accepts the same format as Copilot but "type" and "tools" are optional
+    // Windows: Use "cmd" with args ["/c", "npx", ...] for npx commands
+    // Requires --dangerously-skip-permissions for autonomous MCP tool use
+    if (options.mcpConfigPath) {
+      args.push('--mcp-config', options.mcpConfigPath);
+    }
+
     // Skip permissions for autonomous execution
     if (options.allowAllTools) {
       args.push('--dangerously-skip-permissions');
     }
-    
+
     // Max turns
     if (options.maxTurns) {
       args.push('--max-turns', options.maxTurns.toString());
     }
-    
+
     // Model selection
     if (options.model) {
       args.push('--model', options.model);
     }
-    
+
     return args;
   },
-  
+
   buildEnv(_mcpConfigPath: string | null, baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     return { ...baseEnv };
   },
-  
+
   parseOutput(stdout: string, _stderr: string, _exitCode: number): ParsedOutput {
+    // With text output format, stdout is plain text
     return {
       output: stdout.trim(),
       tokens: undefined

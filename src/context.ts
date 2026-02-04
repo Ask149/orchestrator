@@ -87,10 +87,11 @@ async function readFileWithMode(
 
 /**
  * Build enriched prompt with context
- * 
+ *
  * Note: Windows has ~8192 char command line limit, so we cap total prompt size
  */
 const MAX_PROMPT_LENGTH = 6000; // Leave room for CLI args
+
 export async function buildEnrichedPrompt(
   originalPrompt: string,
   context: TaskContext | undefined,
@@ -128,8 +129,8 @@ export async function buildEnrichedPrompt(
 
   // Truncate context if too long (preserve task prompt space)
   const maxContextLen = MAX_PROMPT_LENGTH - originalPrompt.length - 100;
-  if(contextStr.length > maxContextLen && maxContextLen > 500) {
-    contextStr = contextStr.slice(0, maxContextLen) + `\n... (context truncated for command line limits, total length ${contextStr.length} chars) ...`;
+  if (contextStr.length > maxContextLen && maxContextLen > 500) {
+    contextStr = contextStr.slice(0, maxContextLen) + '\n... [context truncated for command line limits]';
   }
 
   const enrichedPrompt = `[CONTEXT from parent agent]

@@ -102,24 +102,56 @@ Defaults are secure; set `allowAllTools` / `allowAllPaths` to `true` only when y
 
 ### 5. Optional: Configure MCP Servers
 
-Create `<config-dir>/mcp-subagent.json` to define MCP servers available to sub-agents:
+Create `<config-dir>/mcp-subagent.json` to define MCP servers available to sub-agents.
+
+**Important MCP Config Requirements:**
+- `type`: Required for Copilot CLI (`"local"`, `"stdio"`, `"http"`, or `"sse"`)
+- `tools`: Required for Copilot CLI (e.g., `["*"]` for all tools)
+- **Windows**: Use `cmd /c` wrapper for `npx` commands
+
+**macOS/Linux example:**
 
 ```json
 {
   "mcpServers": {
     "playwright": {
+      "type": "local",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-playwright"],
-      "env": {}
+      "args": ["-y", "@playwright/mcp@latest"],
+      "tools": ["*"]
     },
     "fetch": {
+      "type": "local",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-fetch"],
-      "env": {}
+      "args": ["-y", "@anthropic-ai/mcp-fetch"],
+      "tools": ["*"]
     }
   }
 }
 ```
+
+**Windows example (requires `cmd /c` wrapper):**
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "type": "local",
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@playwright/mcp@latest"],
+      "tools": ["*"]
+    },
+    "fetch": {
+      "type": "local",
+      "command": "cmd",
+      "args": ["/c", "npx", "-y", "@anthropic-ai/mcp-fetch"],
+      "tools": ["*"]
+    }
+  }
+}
+```
+
+> **Note**: Without `cmd /c` on Windows, you'll get "Connection closed" errors because Windows cannot directly execute `npx`.
 
 ## Usage
 
