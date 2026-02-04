@@ -111,10 +111,13 @@ function getCLICommand(backendName: string, cliConfig: CLIConfig): string {
 
 /**
  * Create filtered MCP config for specific servers
+ * Claude CLI has stricter schema validation - it rejects 'type' and 'tools' fields
+ * that Copilot CLI requires. We strip these for Claude.
  */
 async function createFilteredMCPConfig(
   servers: string[] | undefined,
-  taskId: string
+  taskId: string,
+  backendName: string = 'copilot'
 ): Promise<string | null> {
   logger.debug('Creating MCP config', {
     taskId,
@@ -123,6 +126,28 @@ async function createFilteredMCPConfig(
   });
 
   if (!servers || servers.length === 0) {
+    // For Claude, we still need to strip type/tools from the full config
+    if (backendName === 'claude') {
+      logger.debug('No specific servers requested, creating Claude-compatible full config');
+      try {
+        const configContent = await readFile(FULL_MCP_CONFIG, 'utf-8');
+        const fullConfig: MCPConfig = JSON.parse(configContent);
+        const claudeConfig: MCPConfig = { mcpServers: {} };
+        
+        for (const [name, serverConfig] of Object.entries(fullConfig.mcpServers)) {
+          const { type, tools, ...rest } = serverConfig as unknown as Record<string, unknown>;
+          claudeConfig.mcpServers[name] = rest as unknown as MCPConfig['mcpServers'][string];
+        }
+        
+        const tempPath = path.join(TEMP_DIR, `mcp_${taskId}_claude_${Date.now()}.json`);
+        await writeFile(tempPath, JSON.stringify(claudeConfig, null, 2));
+        logger.debug('Claude-compatible full MCP config written', { tempPath });
+        return tempPath;
+      } catch (error) {
+        logger.warn('Failed to create Claude-compatible config', { error: String(error) });
+        return null;
+      }
+    }
     logger.debug('No specific servers requested, using full MCP config', { path: FULL_MCP_CONFIG });
     return FULL_MCP_CONFIG;
   }
@@ -147,16 +172,29 @@ async function createFilteredMCPConfig(
 
     for (const server of servers) {
       if (fullConfig.mcpServers[server]) {
-        filteredConfig.mcpServers[server] = fullConfig.mcpServers[server];
-        foundServers.push(server);
         // Cast to access optional fields like 'type' that may exist in actual config
         const serverConfig = fullConfig.mcpServers[server] as unknown as Record<string, unknown>;
-        logger.debug('MCP server found and included', {
-          server,
-          type: serverConfig.type,
-          command: serverConfig.command,
-          args: serverConfig.args
-        });
+        
+        // Claude CLI rejects 'type' and 'tools' fields - strip them
+        if (backendName === 'claude') {
+          const { type, tools, ...claudeCompatible } = serverConfig;
+          filteredConfig.mcpServers[server] = claudeCompatible as unknown as MCPConfig['mcpServers'][string];
+          logger.debug('MCP server included (Claude-compatible, stripped type/tools)', {
+            server,
+            command: claudeCompatible.command,
+            args: claudeCompatible.args,
+            strippedFields: { type, tools }
+          });
+        } else {
+          filteredConfig.mcpServers[server] = fullConfig.mcpServers[server];
+          logger.debug('MCP server found and included', {
+            server,
+            type: serverConfig.type,
+            command: serverConfig.command,
+            args: serverConfig.args
+          });
+        }
+        foundServers.push(server);
       } else {
         missingServers.push(server);
         logger.warn('MCP server not found in config', {
@@ -280,7 +318,8 @@ export async function spawnSubAgent(
     : enrichedPrompt;
 
   // Create MCP config (filtered if specific servers requested)
-  const mcpConfigPath = await createFilteredMCPConfig(task.mcp_servers, task.id);
+  // Claude CLI has stricter schema - we strip 'type' and 'tools' fields for it
+  const mcpConfigPath = await createFilteredMCPConfig(task.mcp_servers, task.id, backendName);
 
   // Get CLI command
   const cliCommand = getCLICommand(backendName, config);
