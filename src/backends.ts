@@ -14,7 +14,9 @@ import type { CLIBackend, CLIBackendOptions, ParsedOutput, CLIConfig } from './t
  * Flags:
  * - copilot -p "prompt" — Programmatic mode
  * - --agent <name> — Use custom agent
- * - --allow-all-tools — Auto-approve all tools
+ * - --allow-all-tools — Auto-approve all tools (alias: --yolo)
+ * - --allow-all-paths — Allow access to all file paths
+ * - --yolo — Full bypass mode (2026), alias for --allow-all-tools
  * - --model <model> — Specify model
  */
 /**
@@ -29,9 +31,24 @@ const BROWSER_AUTOMATION_FALLBACK = `
 You do NOT have browser_navigate or browser_snapshot MCP tools.
 Use Node + Playwright directly (cross-platform):
 
+### Basic (headless, no auth):
 \`\`\`bash
 node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch({ headless: true }); const page = await browser.newPage(); await page.goto('YOUR_URL'); console.log('Title:', await page.title()); const content = await page.content(); console.log('Content:', content.slice(0, 2000)); await browser.close(); })().catch(err => { console.error(err); process.exit(1); });"
 \`\`\`
+
+### With Authenticated Session (for Google/Gemini/etc):
+Use persistent browser context to reuse existing login sessions:
+\`\`\`bash
+node -e "const { chromium } = require('playwright'); const os = require('os'); const path = require('path'); (async () => { const userDataDir = path.join(os.homedir(), '.playwright-profile'); const browser = await chromium.launchPersistentContext(userDataDir, { headless: false }); const page = browser.pages()[0] || await browser.newPage(); await page.goto('YOUR_URL'); console.log('Title:', await page.title()); await browser.close(); })().catch(err => { console.error(err); process.exit(1); });"
+\`\`\`
+
+### Supported Sites Without Auth:
+- perplexity.ai — Full functionality without login
+- duckduckgo.com — Search without login
+
+### Sites Requiring Auth (use persistent context):
+- gemini.google.com — Requires Google sign-in
+- chatgpt.com — Requires OpenAI sign-in
 `;
 
 export const CopilotBackend: CLIBackend = {
@@ -64,6 +81,9 @@ export const CopilotBackend: CLIBackend = {
     
     // Prompt (programmatic mode)
     args.push('-p', prompt);
+
+    // Silent mode for cleaner output (not stats)
+    args.push('-s');
     
     // Auto-approve tools for autonomous execution
     if (options.allowAllTools) {
@@ -125,16 +145,11 @@ export const ClaudeBackend: CLIBackend = {
   buildArgs(prompt: string, options: CLIBackendOptions): string[] {
     const args: string[] = [];
     
-    // Prompt (print mode)
+    // Prompt (print mode for non-interactive)
     args.push('-p', prompt);
-    
-    // Output format for parsing
-    args.push('--output-format', 'stream-json');
-    
-    // MCP config path
-    if (options.mcpConfigPath) {
-      args.push('--mcp-config', options.mcpConfigPath);
-    }
+
+    // Use text output for simpler parsing
+    args.push('--output-format', 'text');
     
     // Skip permissions for autonomous execution
     if (options.allowAllTools) {
@@ -159,40 +174,9 @@ export const ClaudeBackend: CLIBackend = {
   },
   
   parseOutput(stdout: string, _stderr: string, _exitCode: number): ParsedOutput {
-    // Claude stream-json output is newline-delimited JSON
-    // Try to extract the final result
-    const lines = stdout.trim().split('\n');
-    let finalOutput = '';
-    let tokens: { in: number; out: number } | undefined;
-    
-    for (const line of lines) {
-      try {
-        const parsed = JSON.parse(line);
-        
-        // Extract assistant message content
-        if (parsed.type === 'assistant' && parsed.message?.content) {
-          const textBlocks = parsed.message.content.filter(
-            (c: { type: string; text?: string }) => c.type === 'text'
-          );
-          finalOutput = textBlocks.map((c: { text: string }) => c.text).join('\n');
-        }
-        
-        // Extract usage stats
-        if (parsed.type === 'result' && parsed.usage) {
-          tokens = {
-            in: parsed.usage.input_tokens || 0,
-            out: parsed.usage.output_tokens || 0
-          };
-        }
-      } catch {
-        // Not JSON, treat as plain text
-        if (!finalOutput) finalOutput = stdout.trim();
-      }
-    }
-    
     return {
-      output: finalOutput || stdout.trim(),
-      tokens
+      output: stdout.trim(),
+      tokens: undefined
     };
   }
 };

@@ -233,6 +233,10 @@ export async function spawnSubAgent(
   const args = backend.buildArgs(finalPrompt, backendOptions);
   const env = backend.buildEnv(mcpConfigPath, process.env as NodeJS.ProcessEnv);
 
+  // On Windows, only use shell for .bat/.cmd files (need for path resolution) 
+  // For .exe files, shell: true mangles arguments with special characters
+  const needShell = IS_WINDOWS && /\.(bat|cmd)$/i.test(cliCommand);
+
   return new Promise<TaskResult>((resolve) => {
     let stdout = '';
     let stderr = '';
@@ -242,7 +246,9 @@ export async function spawnSubAgent(
       cwd: workspace,
       env,
       timeout,
-      shell: IS_WINDOWS
+      shell: needShell,
+      // Close stdin immediately - CLI tools don't need input, and Claude waits for stdin to close
+      stdio: ['ignore', 'pipe', 'pipe']
     });
 
     const timeoutHandle = setTimeout(() => {
