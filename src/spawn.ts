@@ -311,12 +311,12 @@ export async function spawnSubAgent(
 
   logger.debug('Spawning CLI process', {
     taskId: task.id,
-    command: cliCommand,
-    argsCount: args.length,
-    argsSummary: args.slice(0, 3).map(a => a.length > 50 ? a.slice(0, 50) + '...' : a),
+    command: spawnCommand,
+    argsCount: spawnArgs.length,
+    argsSummary: spawnArgs.slice(0, 3).map(a => a.length > 50 ? a.slice(0, 50) + '...' : a),
     workspace,
     timeout: timeout / 1000,
-    shell: needsShell,
+    isBatFile,
     mcpConfigPath,
     platform: process.platform
   });
@@ -324,7 +324,7 @@ export async function spawnSubAgent(
   // Log full command for verbose debugging
   logger.debug('Full CLI command', {
     taskId: task.id,
-    fullCommand: `${cliCommand} ${args.map(a => a.includes(' ') ? `"${a}"` : a).join(' ')}`.slice(0, 500)
+    fullCommand: `${spawnCommand} ${spawnArgs.map(a => a.includes(' ') ? `"${a}"` : a).join(' ')}`.slice(0, 500)
   });
 
   return new Promise<TaskResult>((resolve) => {
