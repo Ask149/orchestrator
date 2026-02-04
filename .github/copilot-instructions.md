@@ -7,7 +7,7 @@
 ## Project Overview
 
 **Package:** `@ask149/mcp-orchestrator`  
-**Version:** 1.0.1  
+**Version:** 1.1.0  
 **Purpose:** MCP server for spawning parallel CLI sub-agents (Copilot CLI / Claude CLI)
 
 ### Key Principles
@@ -30,7 +30,8 @@ src/
 ├── context.ts    # File context handling (full/summary/grep modes)
 ├── types.ts      # TypeScript interfaces and timeout configs
 ├── logger.ts     # Structured logging with rotation
-└── health.ts     # Health check CLI
+├── health.ts     # Health check CLI and MCP tool
+└── resources.ts  # MCP Resources (logs://, config://)
 ```
 
 ---
@@ -80,7 +81,8 @@ interface CLIBackend {
 | Retry logic | Auto-retry once on timeout/ECONNRESET (2s delay) |
 | Structured logging | LOG_LEVEL env var, JSONL output |
 | Log rotation | Auto-rotates at 10MB |
-| Health check | `npm run health` for CI/deployment validation |
+| Health check | `npm run health` CLI + `check_health` MCP tool |
+| MCP Resources | `logs://orchestrator/app`, `config://orchestrator/current` |
 
 ---
 
@@ -155,7 +157,7 @@ npm start          # Start MCP server
 
 ## Testing
 
-15 smoke tests covering:
+22 smoke tests covering:
 - Cross-platform config paths
 - Secure permission defaults
 - Node-based grep implementation
@@ -164,6 +166,9 @@ npm start          # Start MCP server
 - Active task tracking for graceful shutdown
 - Retry logic for transient errors
 - Logger level filtering
+- MCP Resources validation
+- Version consistency
+- Health check structure
 
 ---
 
@@ -212,8 +217,8 @@ Package: https://www.npmjs.com/package/@ask149/mcp-orchestrator
 
 ```bash
 # Tag the release
-git tag v1.0.1
-git push origin v1.0.1
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
 ---
@@ -222,7 +227,7 @@ git push origin v1.0.1
 
 See [CHANGELOG.md](../CHANGELOG.md) for full version history.
 
-**Current version:** 1.0.1
+**Current version:** 1.1.0
 
 ---
 

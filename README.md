@@ -16,6 +16,7 @@ MCP server for spawning parallel sub-agents with multi-CLI backend support.
 - **Parallel execution** — Run multiple sub-agents simultaneously
 - **Context passing** — Pass file contents (full/summary/grep) to sub-agents
 - **MCP server filtering** — Specify which MCP servers each sub-agent can use
+- **MCP Resources** — Expose logs and config as readable MCP resources
 - **Timeout handling** — Per-task and global timeouts
 - **Audit logging** — All executions logged to `~/.config/orchestrator/logs/`
 
@@ -291,10 +292,10 @@ Add to your MCP settings to use as a standalone server:
 
 ## Audit Logs
 
-Execution logs are written to `<config-dir>/logs/YYYY-MM-DD.jsonl`:
+Execution logs are written to `<config-dir>/logs/orchestrator.jsonl`:
 
 ```jsonl
-{"timestamp":"2026-02-01T10:00:00.000Z","task_id":"stripe","backend":"copilot","success":true,"duration_ms":5432}
+{"timestamp":"2026-02-01T10:00:00.000Z","level":"INFO","message":"Spawning 3 sub-agents","taskIds":["stripe","google","meta"]}
 ```
 
 ## Production Features
@@ -323,6 +324,33 @@ Transient failures (timeout, connection reset) are automatically retried once wi
 
 Application logs auto-rotate at 10MB:
 - `~/.config/orchestrator/logs/orchestrator.jsonl`
+
+## MCP Resources (v1.1.0+)
+
+The orchestrator exposes its logs and configuration as MCP resources:
+
+| Resource URI | Description |
+|--------------|-------------|
+| `logs://orchestrator/app` | Application logs in JSONL format |
+| `config://orchestrator/current` | Current CLI and MCP server configuration |
+
+Use these resources to inspect orchestrator state without direct file access.
+
+### Tool: `check_health`
+
+Verify orchestrator health via MCP (alternative to CLI `npm run health`):
+
+```json
+{
+  "healthy": true,
+  "timestamp": "2026-02-03T10:00:00.000Z",
+  "platform": "darwin-arm64",
+  "backends": {
+    "copilot": { "available": true, "version": "1.0.0" },
+    "claude": { "available": false, "error": "not found" }
+  }
+}
+```
 
 ## Development
 
