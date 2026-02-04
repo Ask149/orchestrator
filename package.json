@@ -1,6 +1,6 @@
 {
   "name": "@ask149/mcp-orchestrator",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "MCP server for spawning parallel Copilot sub-agents with context passing",
   "type": "module",
   "main": "dist/index.js",
@@ -30,7 +30,13 @@
     "test:watch": "jest --watch",
     "prepublishOnly": "npm run build && npm test"
   },
-  "keywords": ["mcp", "copilot", "orchestrator", "parallel", "subagents"],
+  "keywords": [
+    "mcp",
+    "copilot",
+    "orchestrator",
+    "parallel",
+    "subagents"
+  ],
   "author": "Ashish Kshirsagar",
   "license": "MIT",
   "dependencies": {
