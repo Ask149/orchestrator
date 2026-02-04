@@ -20,14 +20,17 @@ import type { CLIBackend, CLIBackendOptions, ParsedOutput, CLIConfig } from './t
 /**
  * MCP Tool Fallback Instructions
  *
- * Copilot CLI doesn't load MCP servers in non-interactive mode.
- * These instructions help sub-agents use npm packages directly as fallback.
+ * Copilot CLI loads MCP servers from ~/.copilot/mcp-config.json in -p mode.
+ * The --additional-mcp-config flag augments (not replaces) the default config.
+ *
+ * If MCP servers aren't configured in the default location, provide fallback instructions
+ * so sub-agents can use npm packages directly.
  */
 const BROWSER_AUTOMATION_FALLBACK = `
-## Browser Automation (No MCP Tools Available)
+## Browser Automation Fallback
 
-You do NOT have browser_navigate or browser_snapshot MCP tools.
-Use Node + Playwright directly (cross-platform):
+If playwright MCP tools are not available (not in ~/.copilot/mcp-config.json),
+use Node.js + Playwright npm package directly (cross-platform):
 
 \`\`\`bash
 node -e "const { chromium } = require('playwright'); (async () => { const browser = await chromium.launch({ headless: true }); const page = await browser.newPage(); await page.goto('YOUR_URL'); console.log('Title:', await page.title()); const content = await page.content(); console.log('Content:', content.slice(0, 2000)); await browser.close(); })().catch(err => { console.error(err); process.exit(1); });"
@@ -63,11 +66,11 @@ export const CopilotBackend: CLIBackend = {
     // Silent mode for cleaner output (no stats)
     args.push('-s');
 
-    // MCP config - pass additional MCP servers for this session
-    // Format: @<filepath> for file path
-    // Note: mcp-subagent.json must include:
-    //   - "type": "local" (or "stdio", "http", "sse") - REQUIRED for Copilot
-    //   - "tools": ["*"] or specific tool names - REQUIRED for Copilot
+    // MCP config - augment the default ~/.copilot/mcp-config.json with additional servers
+    // Format: @<filepath> for file path (@ prefix required)
+    // Note: MCP servers MUST be in ~/.copilot/mcp-config.json for -p mode
+    //   - --additional-mcp-config AUGMENTS, doesn't replace the default config
+    //   - mcp-subagent.json must include: "type" and "tools" fields (required for Copilot)
     //   - Windows: Use "cmd" with args ["/c", "npx", ...] for npx commands
     if (options.mcpConfigPath) {
       args.push('--additional-mcp-config', `@${options.mcpConfigPath}`);
@@ -92,7 +95,8 @@ export const CopilotBackend: CLIBackend = {
   },
 
   buildEnv(_mcpConfigPath: string | null, baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-    // Sub-agents inherit MCP config from ~/.copilot/mcp-config.json automatically
+    // Sub-agents use MCP config from ~/.copilot/mcp-config.json (required for -p mode)
+    // The --additional-mcp-config flag augments this default config
     return { ...baseEnv };
   },
 

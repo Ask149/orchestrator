@@ -236,16 +236,23 @@ See [CHANGELOG.md](../CHANGELOG.md) for full version history.
 - **stdout is reserved** — All logging must use `console.error` (stderr)
 - StdioServerTransport handles JSON-RPC over stdio
 
-### 3. Windows Compatibility
+### 3. Copilot MCP Config Location (CRITICAL)
+- MCP servers **must** be in `~/.copilot/mcp-config.json` for `-p` mode
+- `--additional-mcp-config` only **augments** (adds to) the default config
+- Servers not in `~/.copilot/mcp-config.json` will NOT load in non-interactive mode
+- Required fields: `type` ("local"/"stdio"/"http"/"sse") and `tools` (["*"] or specific)
+
+### 4. Windows Compatibility
 - Always use `os.tmpdir()` not `/tmp`
 - Always use `path.join()` not string concatenation
 - Set `shell: true` in spawn options for `.cmd` files
+- Use `cmd /c npx` wrapper for npx-based MCP servers
 
-### 4. Async Logging
+### 5. Async Logging
 - Use `fs/promises` not sync methods
 - Silent fail on log writes — logging should never break execution
 
-### 5. Task Tracking
+### 6. Task Tracking
 - Always `activeTasks.add(id)` at start, `activeTasks.delete(id)` in finally
 - Use `Promise.allSettled` not `Promise.all` for parallel tasks
 
