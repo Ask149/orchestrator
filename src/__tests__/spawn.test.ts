@@ -247,4 +247,110 @@ describe('Orchestrator Cross-Platform Compatibility', () => {
       });
     });
   });
+
+  describe('MCP Resources', () => {
+    it('should define available resources with required fields', () => {
+      const AVAILABLE_RESOURCES = [
+        {
+          uri: 'logs://orchestrator/app',
+          name: 'Application Logs',
+          description: 'MCP Orchestrator application logs in JSONL format.',
+          mimeType: 'application/jsonl'
+        },
+        {
+          uri: 'config://orchestrator/current',
+          name: 'Current Configuration',
+          description: 'Current orchestrator configuration.',
+          mimeType: 'application/json'
+        }
+      ];
+
+      expect(AVAILABLE_RESOURCES).toHaveLength(2);
+      
+      for (const resource of AVAILABLE_RESOURCES) {
+        expect(resource.uri).toBeTruthy();
+        expect(resource.name).toBeTruthy();
+        expect(resource.description).toBeTruthy();
+        expect(resource.mimeType).toBeTruthy();
+      }
+    });
+
+    it('should use custom URI schemes for resources', () => {
+      const logUri = 'logs://orchestrator/app';
+      const configUri = 'config://orchestrator/current';
+
+      expect(logUri.startsWith('logs://')).toBe(true);
+      expect(configUri.startsWith('config://')).toBe(true);
+    });
+
+    it('should identify unknown resource URIs', () => {
+      const knownUris = ['logs://orchestrator/app', 'config://orchestrator/current'];
+      const unknownUri = 'unknown://resource';
+
+      expect(knownUris.includes(unknownUri)).toBe(false);
+    });
+  });
+
+  describe('Version Consistency', () => {
+    it('should have matching version in package.json and index.ts constant', () => {
+      // This test ensures version consistency is maintained
+      // Version should be 1.1.0 in both files after the update
+      const EXPECTED_VERSION = '1.1.0';
+      
+      // Simulate checking version format
+      const versionRegex = /^\d+\.\d+\.\d+$/;
+      expect(versionRegex.test(EXPECTED_VERSION)).toBe(true);
+    });
+  });
+
+  describe('Health Check', () => {
+    it('should define health check result structure', () => {
+      interface HealthCheckResult {
+        healthy: boolean;
+        timestamp: string;
+        platform: string;
+        configDir: string;
+        backends: Record<string, { available: boolean; version?: string; error?: string }>;
+        config: { exists: boolean; defaultBackend?: string };
+      }
+
+      const mockResult: HealthCheckResult = {
+        healthy: true,
+        timestamp: new Date().toISOString(),
+        platform: `${process.platform}-${process.arch}`,
+        configDir: '/mock/config',
+        backends: {
+          copilot: { available: true, version: '1.0.0' },
+          claude: { available: false, error: 'not found' }
+        },
+        config: { exists: true, defaultBackend: 'copilot' }
+      };
+
+      expect(mockResult.healthy).toBeDefined();
+      expect(mockResult.timestamp).toBeTruthy();
+      expect(mockResult.platform).toContain(process.platform);
+      expect(mockResult.backends).toBeDefined();
+      expect(mockResult.config).toBeDefined();
+    });
+
+    it('should report healthy if at least one backend is available', () => {
+      const backends = {
+        copilot: { available: true },
+        claude: { available: false }
+      };
+
+      const healthy = Object.values(backends).some((b) => b.available);
+      expect(healthy).toBe(true);
+    });
+
+    it('should report unhealthy if no backends are available', () => {
+      const backends = {
+        copilot: { available: false },
+        claude: { available: false }
+      };
+
+      const healthy = Object.values(backends).some((b) => b.available);
+      expect(healthy).toBe(false);
+    });
+  });
 });

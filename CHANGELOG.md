@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-02-03
+
+### Added
+- **MCP Resources primitive** — Expose orchestrator logs and config as MCP resources
+  - `logs://orchestrator/app` — Application logs in JSONL format
+  - `config://orchestrator/current` — Current configuration (CLI, MCP servers, env vars)
+- **`check_health` tool** — Health check now available as MCP tool (in addition to CLI)
+- New file `src/resources.ts` for resource handling
+- 4 new tests for resources and health check (19 total)
+
+### Changed
+- Server now declares `resources: {}` capability alongside `tools: {}`
+- `CallToolRequestSchema` handler refactored to support multiple tools
+- Startup log now includes capabilities list
+
 ## [1.0.1] - 2026-02-03
 
 ### Added
@@ -38,5 +53,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI backend abstraction interface for extensibility
 - 11 smoke tests for cross-platform compatibility
 
+[1.1.0]: https://github.com/Ask149/orchestrator/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/Ask149/orchestrator/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Ask149/orchestrator/releases/tag/v1.0.0

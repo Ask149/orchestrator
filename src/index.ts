@@ -11,11 +11,15 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { spawnSubAgents, getAvailableBackends, activeTasks } from './spawn.js';
 import type { SpawnSubagentsInput, SpawnSubagentsOutput } from './types.js';
 import { logger } from './logger.js';
+import { AVAILABLE_RESOURCES, readResource } from './resources.js';
+import { checkHealth } from './health.js';
 
 const DEFAULT_WORKSPACE = process.env.ORCHESTRATOR_WORKSPACE || process.cwd();
 const DEFAULT_TIMEOUT = 120; // seconds
@@ -53,11 +57,12 @@ const SpawnSubagentsInputSchema = z.object({
 const server = new Server(
   {
     name: 'mcp-orchestrator',
-    version: '1.0.1'
+    version: '1.1.0'
   },
   {
     capabilities: {
-      tools: {}
+      tools: {},
+      resources: {}
     }
   }
 );
@@ -165,6 +170,22 @@ Example: Research 3 companies in parallel
           },
           required: ['tasks']
         }
+      },
+      {
+        name: 'check_health',
+        description: `Check the health status of the MCP Orchestrator.
+
+Returns information about:
+- Available CLI backends (copilot, claude) and their versions
+- Configuration file status
+- Platform information
+
+Use this to verify the orchestrator is properly configured before spawning sub-agents.`,
+        inputSchema: {
+          type: 'object',
+          properties: {},
+          required: []
+        }
       }
     ]
   };
@@ -172,54 +193,107 @@ Example: Research 3 companies in parallel
 
 // Handle tool calls
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  if (request.params.name !== 'spawn_subagents') {
-    throw new Error(`Unknown tool: ${request.params.name}`);
-  }
+  const toolName = request.params.name;
 
-  // Validate input
-  const parseResult = SpawnSubagentsInputSchema.safeParse(request.params.arguments);
-  if (!parseResult.success) {
+  // Handle check_health tool
+  if (toolName === 'check_health') {
+    logger.info('Health check requested');
+    const healthResult = await checkHealth();
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify({
-            error: 'Invalid input',
-            details: parseResult.error.errors
-          }, null, 2)
+          text: JSON.stringify(healthResult, null, 2)
         }
       ]
     };
   }
 
-  const input: SpawnSubagentsInput = parseResult.data;
-  const defaultWorkspace = input.default_workspace || DEFAULT_WORKSPACE;
-  const defaultTimeout = input.default_timeout_seconds || DEFAULT_TIMEOUT;
+  // Handle spawn_subagents tool
+  if (toolName === 'spawn_subagents') {
+    // Validate input
+    const parseResult = SpawnSubagentsInputSchema.safeParse(request.params.arguments);
+    if (!parseResult.success) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({
+              error: 'Invalid input',
+              details: parseResult.error.errors
+            }, null, 2)
+          }
+        ]
+      };
+    }
 
-  logger.info(`Spawning ${input.tasks.length} sub-agents`, { taskIds: input.tasks.map(t => t.id) });
+    const input: SpawnSubagentsInput = parseResult.data;
+    const defaultWorkspace = input.default_workspace || DEFAULT_WORKSPACE;
+    const defaultTimeout = input.default_timeout_seconds || DEFAULT_TIMEOUT;
 
-  const startTime = Date.now();
-  const results = await spawnSubAgents(input.tasks, defaultWorkspace, defaultTimeout);
-  const totalDuration = Date.now() - startTime;
+    logger.info(`Spawning ${input.tasks.length} sub-agents`, { taskIds: input.tasks.map(t => t.id) });
 
-  const output: SpawnSubagentsOutput = {
-    completed: results.filter((r) => r.success).length,
-    failed: results.filter((r) => !r.success).length,
-    total: results.length,
-    results,
-    total_duration_ms: totalDuration
-  };
+    const startTime = Date.now();
+    const results = await spawnSubAgents(input.tasks, defaultWorkspace, defaultTimeout);
+    const totalDuration = Date.now() - startTime;
 
-  logger.info(`Completed: ${output.completed}/${output.total}`, { totalDuration, completed: output.completed, failed: output.failed });
+    const output: SpawnSubagentsOutput = {
+      completed: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
+      total: results.length,
+      results,
+      total_duration_ms: totalDuration
+    };
 
+    logger.info(`Completed: ${output.completed}/${output.total}`, { totalDuration, completed: output.completed, failed: output.failed });
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(output, null, 2)
+        }
+      ]
+    };
+  }
+
+  // Unknown tool
+  throw new Error(`Unknown tool: ${toolName}`);
+});
+
+// List available resources
+server.setRequestHandler(ListResourcesRequestSchema, async () => {
   return {
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify(output, null, 2)
-      }
-    ]
+    resources: AVAILABLE_RESOURCES.map(r => ({
+      uri: r.uri,
+      name: r.name,
+      description: r.description,
+      mimeType: r.mimeType
+    }))
   };
+});
+
+// Read resource content
+server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+  const uri = request.params.uri;
+  logger.debug(`Reading resource: ${uri}`);
+  
+  try {
+    const { content, mimeType } = await readResource(uri);
+    return {
+      contents: [
+        {
+          uri,
+          mimeType,
+          text: content
+        }
+      ]
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    logger.error(`Failed to read resource: ${uri}`, { error: message });
+    throw new Error(`Failed to read resource ${uri}: ${message}`);
+  }
 });
 
 // Graceful shutdown handling
@@ -261,7 +335,7 @@ if (process.platform === 'win32') {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  logger.info('MCP Orchestrator server started', { version: '1.1.0' });
+  logger.info('MCP Orchestrator server started', { version: '1.1.0', capabilities: ['tools', 'resources'] });
 }
 
 main().catch((error) => {
