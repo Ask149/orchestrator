@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-02-03
+
+### Added
+- **Extensive DEBUG logging** for troubleshooting MCP server issues and CLI execution
+  - `spawn.ts`: CLI config loading, command resolution, MCP config creation, process details
+  - `spawn.ts`: stdout/stderr chunk logging, exit codes, MCP server discovery (found/missing)
+  - `backends.ts`: Args building and output parsing for copilot/claude backends
+  - `context.ts`: File reading operations (full/summary/grep modes), prompt enrichment
+  - `resources.ts`: Resource reads and config assembly
+- Enable verbose logging with `LOG_LEVEL=DEBUG`
+
 ## [1.1.0] - 2026-02-03
 
 ### Added
@@ -53,6 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI backend abstraction interface for extensibility
 - 11 smoke tests for cross-platform compatibility
 
+[1.1.2]: https://github.com/Ask149/orchestrator/compare/v1.1.0...v1.1.2
 [1.1.0]: https://github.com/Ask149/orchestrator/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/Ask149/orchestrator/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Ask149/orchestrator/releases/tag/v1.0.0

@@ -7,7 +7,7 @@
 ## Project Overview
 
 **Package:** `@ask149/mcp-orchestrator`  
-**Version:** 1.1.0  
+**Version:** 1.1.2  
 **Purpose:** MCP server for spawning parallel CLI sub-agents (Copilot CLI / Claude CLI)
 
 ### Key Principles
@@ -227,7 +227,7 @@ git push origin v1.1.0
 
 See [CHANGELOG.md](../CHANGELOG.md) for full version history.
 
-**Current version:** 1.1.0
+**Current version:** 1.1.2
 
 ---
 
