@@ -133,12 +133,12 @@ async function createFilteredMCPConfig(
         const configContent = await readFile(FULL_MCP_CONFIG, 'utf-8');
         const fullConfig: MCPConfig = JSON.parse(configContent);
         const claudeConfig: MCPConfig = { mcpServers: {} };
-        
+
         for (const [name, serverConfig] of Object.entries(fullConfig.mcpServers)) {
           const { type, tools, ...rest } = serverConfig as unknown as Record<string, unknown>;
           claudeConfig.mcpServers[name] = rest as unknown as MCPConfig['mcpServers'][string];
         }
-        
+
         const tempPath = path.join(TEMP_DIR, `mcp_${taskId}_claude_${Date.now()}.json`);
         await writeFile(tempPath, JSON.stringify(claudeConfig, null, 2));
         logger.debug('Claude-compatible full MCP config written', { tempPath });
@@ -174,7 +174,7 @@ async function createFilteredMCPConfig(
       if (fullConfig.mcpServers[server]) {
         // Cast to access optional fields like 'type' that may exist in actual config
         const serverConfig = fullConfig.mcpServers[server] as unknown as Record<string, unknown>;
-        
+
         // Claude CLI rejects 'type' and 'tools' fields - strip them
         if (backendName === 'claude') {
           const { type, tools, ...claudeCompatible } = serverConfig;
