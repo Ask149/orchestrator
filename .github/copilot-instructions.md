@@ -237,9 +237,11 @@ See [CHANGELOG.md](../CHANGELOG.md) for full version history.
 - StdioServerTransport handles JSON-RPC over stdio
 
 ### 3. Copilot MCP Config Location (CRITICAL)
-- MCP servers **must** be in `~/.copilot/mcp-config.json` for `-p` mode
+- MCP servers **must** be in the default config location for `-p` mode:
+  - **macOS/Linux:** `~/.copilot/mcp-config.json`
+  - **Windows:** `%USERPROFILE%\.copilot\mcp-config.json`
 - `--additional-mcp-config` only **augments** (adds to) the default config
-- Servers not in `~/.copilot/mcp-config.json` will NOT load in non-interactive mode
+- Servers not in the default location will NOT load in non-interactive mode
 - Required fields: `type` ("local"/"stdio"/"http"/"sse") and `tools` (["*"] or specific)
 
 ### 4. Windows Compatibility

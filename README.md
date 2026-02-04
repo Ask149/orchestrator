@@ -211,7 +211,11 @@ Spawn parallel sub-agents for complex tasks.
 
 Define MCP servers available to sub-agents.
 
-> **⚠️ IMPORTANT:** For Copilot CLI in `-p` (programmatic) mode, MCP servers **must** be configured in `~/.copilot/mcp-config.json`. The `--additional-mcp-config` flag only **augments** (adds to) this default config. Servers not in the default config location will not load in `-p` mode.
+> **⚠️ IMPORTANT:** For Copilot CLI in `-p` (programmatic) mode, MCP servers **must** be configured in the default config location. The `--additional-mcp-config` flag only **augments** (adds to) this default config. Servers not in the default location will not load in `-p` mode.
+>
+> **Config location:**
+> - **macOS/Linux:** `~/.copilot/mcp-config.json`
+> - **Windows:** `%USERPROFILE%\.copilot\mcp-config.json` (e.g., `C:\Users\username\.copilot\mcp-config.json`)
 
 **Required fields for CLI compatibility:**
 
