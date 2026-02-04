@@ -303,9 +303,11 @@ export async function spawnSubAgent(
   const args = backend.buildArgs(finalPrompt, backendOptions);
   const env = backend.buildEnv(mcpConfigPath, process.env as NodeJS.ProcessEnv);
 
-  // On Windows, only use shell for .bat/.cmd files (needed for path resolution)
-  // For .exe files, shell: true mangles arguments with special characters
-  const needsShell = IS_WINDOWS && /\.(bat|cmd)$/i.test(cliCommand);
+  // On Windows, .bat/.cmd files need to be run via cmd /c to work with spawn
+  // Using shell: true mangles arguments with spaces, so we use cmd /c explicitly
+  const isBatFile = IS_WINDOWS && /\.(bat|cmd)$/i.test(cliCommand);
+  const spawnCommand = isBatFile ? 'cmd' : cliCommand;
+  const spawnArgs = isBatFile ? ['/c', cliCommand, ...args] : args;
 
   logger.debug('Spawning CLI process', {
     taskId: task.id,
@@ -332,12 +334,12 @@ export async function spawnSubAgent(
     let stdoutChunks = 0;
     let stderrChunks = 0;
 
-    const proc = spawn(cliCommand, args, {
+    const proc = spawn(spawnCommand, spawnArgs, {
       cwd: workspace,
       env,
       timeout,
-      shell: needsShell,
-      // Close stdin immediately - CLI tools don't need input, and Claude waits for stdin to close
+      // Don't use shell: true as it mangles arguments with spaces on Windows
+      // For .bat files, we use cmd /c explicitly instead
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
