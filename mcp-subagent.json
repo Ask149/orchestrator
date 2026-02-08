@@ -1,0 +1,22 @@
+{
+  "_description": "MCP config for sub-agents spawned by orchestrator. All available servers.",
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@anthropic/mcp-playwright"]
+    },
+    "fetch": {
+      "command": "npx",
+      "args": ["@anthropic/mcp-fetch"]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "@anthropic/mcp-filesystem",
+        "/Users/ashishkshirsagar/Projects/active/job-search-automation",
+        "/Users/ashishkshirsagar/Projects/active/resume",
+        "/Users/ashishkshirsagar/Projects/active/personal_assistant"
+      ]
+    }
+  }
+}

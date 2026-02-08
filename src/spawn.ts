@@ -7,7 +7,8 @@
  */
 
 import { spawn } from 'child_process';
-import { writeFile, unlink, mkdir, appendFile, readFile } from 'fs/promises';
+import { writeFile, unlink, mkdir, appendFile, readFile, access } from 'fs/promises';
+import { constants } from 'fs';
 import os from 'os';
 import path from 'path';
 import { buildEnrichedPrompt, summarizeOutput } from './context.js';
@@ -30,6 +31,8 @@ const FULL_MCP_CONFIG = path.join(CONFIG_DIR, 'mcp-subagent.json');
 const CLI_CONFIG_PATH = path.join(CONFIG_DIR, 'config.json');
 const LOG_DIR = path.join(CONFIG_DIR, 'logs');
 const TEMP_DIR = os.tmpdir();
+const COPILOT_CONFIG_DIR = process.env.XDG_CONFIG_HOME || path.join(HOME_DIR, '.copilot');
+const COPILOT_MCP_CONFIG = path.join(COPILOT_CONFIG_DIR, 'mcp-config.json');
 
 // Environment overrides
 const ENV_COPILOT_CLI = process.env.COPILOT_CLI;
@@ -40,6 +43,80 @@ function isTempPath(filePath: string): boolean {
   const tempRoot = path.resolve(TEMP_DIR);
   const target = path.resolve(filePath);
   return target.startsWith(`${tempRoot}${path.sep}`);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+async function readMcpConfig(filePath: string): Promise<MCPConfig> {
+  try {
+    const content = await readFile(filePath, 'utf-8');
+    const parsed = JSON.parse(content);
+    if (isRecord(parsed) && isRecord(parsed.mcpServers)) {
+      return { mcpServers: parsed.mcpServers as MCPConfig['mcpServers'] };
+    }
+  } catch {
+    // fall through to default
+  }
+  return { mcpServers: {} };
+}
+
+async function ensureCopilotMcpConfig(requestedServers?: string[]): Promise<void> {
+  const hasFullConfig = await access(FULL_MCP_CONFIG, constants.R_OK)
+    .then(() => true)
+    .catch(() => false);
+
+  if (!hasFullConfig) {
+    logger.warn('Copilot MCP sync skipped: orchestrator MCP config missing', { path: FULL_MCP_CONFIG });
+    return;
+  }
+
+  const orchestratorConfig = await readMcpConfig(FULL_MCP_CONFIG);
+  const copilotConfig = await readMcpConfig(COPILOT_MCP_CONFIG);
+
+  const serversToSync = (requestedServers && requestedServers.length > 0)
+    ? requestedServers
+    : Object.keys(orchestratorConfig.mcpServers);
+
+  if (serversToSync.length === 0) {
+    logger.debug('Copilot MCP sync skipped: no servers to sync');
+    return;
+  }
+
+  let updated = false;
+  for (const server of serversToSync) {
+    const source = orchestratorConfig.mcpServers[server];
+    if (!source) continue;
+    const dest = copilotConfig.mcpServers[server];
+    if (!dest) {
+      copilotConfig.mcpServers[server] = source;
+      updated = true;
+      logger.info('Synced MCP server into Copilot config', { server, dest: COPILOT_MCP_CONFIG });
+    } else if (JSON.stringify(dest) !== JSON.stringify(source)) {
+      logger.warn('MCP server differs between orchestrator and Copilot configs', {
+        server,
+        orchestrator: FULL_MCP_CONFIG,
+        copilot: COPILOT_MCP_CONFIG
+      });
+    }
+  }
+
+  if (!updated) return;
+
+  await mkdir(COPILOT_CONFIG_DIR, { recursive: true });
+  const hasExisting = await access(COPILOT_MCP_CONFIG, constants.F_OK)
+    .then(() => true)
+    .catch(() => false);
+  if (hasExisting) {
+    const backupPath = `${COPILOT_MCP_CONFIG}.backup.${Date.now()}`;
+    const existingContent = await readFile(COPILOT_MCP_CONFIG, 'utf-8').catch(() => '');
+    if (existingContent) {
+      await writeFile(backupPath, existingContent);
+    }
+  }
+
+  await writeFile(COPILOT_MCP_CONFIG, JSON.stringify(copilotConfig, null, 2));
 }
 
 /**
@@ -125,11 +202,19 @@ async function createFilteredMCPConfig(
     fullConfigPath: FULL_MCP_CONFIG
   });
 
+  const hasFullConfig = await access(FULL_MCP_CONFIG, constants.R_OK)
+    .then(() => true)
+    .catch(() => false);
+
   if (!servers || servers.length === 0) {
     // For Claude, we still need to strip type/tools from the full config
     if (backendName === 'claude') {
       logger.debug('No specific servers requested, creating Claude-compatible full config');
       try {
+        if (!hasFullConfig) {
+          logger.warn('MCP config not found or not readable', { path: FULL_MCP_CONFIG });
+          return null;
+        }
         const configContent = await readFile(FULL_MCP_CONFIG, 'utf-8');
         const fullConfig: MCPConfig = JSON.parse(configContent);
         const claudeConfig: MCPConfig = { mcpServers: {} };
@@ -148,12 +233,19 @@ async function createFilteredMCPConfig(
         return null;
       }
     }
+    if (!hasFullConfig) {
+      logger.warn('MCP config not found or not readable', { path: FULL_MCP_CONFIG });
+      return null;
+    }
     logger.debug('No specific servers requested, using full MCP config', { path: FULL_MCP_CONFIG });
     return FULL_MCP_CONFIG;
   }
 
   try {
-    const { readFile } = await import('fs/promises');
+    if (!hasFullConfig) {
+      logger.warn('MCP config not found or not readable', { path: FULL_MCP_CONFIG });
+      return null;
+    }
     const configContent = await readFile(FULL_MCP_CONFIG, 'utf-8');
     const fullConfig: MCPConfig = JSON.parse(configContent);
     const availableServers = Object.keys(fullConfig.mcpServers || {});
@@ -226,12 +318,12 @@ async function createFilteredMCPConfig(
 
     return tempPath;
   } catch (error) {
-    logger.warn('Failed to create filtered MCP config, using full config', {
+    logger.warn('Failed to create filtered MCP config, proceeding without MCP config', {
       error: String(error),
       fullConfigPath: FULL_MCP_CONFIG,
       hint: 'Ensure mcp-subagent.json exists and is valid JSON'
     });
-    return FULL_MCP_CONFIG;
+    return null;
   }
 }
 
@@ -246,7 +338,7 @@ async function logExecution(
 ): Promise<void> {
   try {
     await mkdir(LOG_DIR, { recursive: true });
-    const logFile = path.join(LOG_DIR, `${new Date().toISOString().split('T')[0]}.jsonl`);
+    const logFile = path.join(LOG_DIR, 'orchestrator.jsonl');
 
     const logEntry = {
       timestamp: new Date().toISOString(),
@@ -593,6 +685,28 @@ export async function spawnSubAgents(
 ): Promise<TaskResult[]> {
   // Load CLI config once for all tasks
   const cliConfig = await loadCLIConfig();
+
+  const copilotRequested = new Set<string>();
+  let copilotHasUnspecifiedServers = false;
+  let hasCopilotTasks = false;
+
+  for (const task of tasks) {
+    const backendName = task.cli_backend || cliConfig.backend || 'copilot';
+    if (backendName !== 'copilot') continue;
+    hasCopilotTasks = true;
+    if (task.mcp_servers && task.mcp_servers.length > 0) {
+      task.mcp_servers.forEach((server) => copilotRequested.add(server));
+    } else {
+      copilotHasUnspecifiedServers = true;
+    }
+  }
+
+  if (hasCopilotTasks) {
+    const serversToSync = copilotHasUnspecifiedServers
+      ? undefined
+      : Array.from(copilotRequested);
+    await ensureCopilotMcpConfig(serversToSync);
+  }
 
   const promises = tasks.map((task) =>
     spawnWithRetry(task, defaultWorkspace, defaultTimeout, cliConfig)

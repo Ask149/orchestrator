@@ -51,6 +51,20 @@ const SpawnSubagentsInputSchema = z.object({
   tasks: z.array(SubAgentTaskSchema).min(1).max(10),
   default_timeout_seconds: z.number().optional(),
   default_workspace: z.string().optional()
+}).superRefine((value, ctx) => {
+  const seen = new Map<string, number>();
+  value.tasks.forEach((task, index) => {
+    const priorIndex = seen.get(task.id);
+    if (priorIndex !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['tasks', index, 'id'],
+        message: `Duplicate task id: "${task.id}" (also at index ${priorIndex})`
+      });
+    } else {
+      seen.set(task.id, index);
+    }
+  });
 });
 
 // Create MCP server
