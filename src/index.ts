@@ -71,7 +71,7 @@ const SpawnSubagentsInputSchema = z.object({
 const server = new Server(
   {
     name: 'mcp-orchestrator',
-    version: '1.1.3'
+    version: '1.1.4'
   },
   {
     capabilities: {
@@ -349,7 +349,7 @@ if (process.platform === 'win32') {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  logger.info('MCP Orchestrator server started', { version: '1.1.3', capabilities: ['tools', 'resources'] });
+  logger.info('MCP Orchestrator server started', { version: '1.1.4', capabilities: ['tools', 'resources'] });
 }
 
 main().catch((error) => {

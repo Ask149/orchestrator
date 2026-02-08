@@ -332,7 +332,10 @@ The orchestrator exposes its logs and configuration as MCP resources:
 | Resource URI | Description |
 |--------------|-------------|
 | `logs://orchestrator/app` | Application logs in JSONL format |
+| `logs://orchestrator/recent` | Tail of application logs (last ~200 lines) |
 | `config://orchestrator/current` | Current CLI and MCP server configuration |
+| `health://orchestrator/status` | Health status snapshot (same as `check_health`) |
+| `state://orchestrator/active_tasks` | In-flight task IDs tracked for graceful shutdown |
 
 Use these resources to inspect orchestrator state without direct file access.
 
@@ -385,4 +388,3 @@ Run tests with: `npm test`
 ## License
 
 MIT
-
