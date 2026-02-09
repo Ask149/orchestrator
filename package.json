@@ -33,9 +33,16 @@
   "keywords": [
     "mcp",
     "copilot",
+    "claude",
     "orchestrator",
     "parallel",
-    "subagents"
+    "subagents",
+    "ai-agent",
+    "model-context-protocol",
+    "multi-agent",
+    "automation",
+    "cli",
+    "coding-agent"
   ],
   "author": "Ashish Kshirsagar",
   "license": "MIT",

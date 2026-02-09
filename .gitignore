@@ -32,6 +32,9 @@ temp/
 .cache/
 .playwright-mcp/
 
+# Secrets
+secrets.json
+
 # OS-specific
 .DS_Store
 Thumbs.db

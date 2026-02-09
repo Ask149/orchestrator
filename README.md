@@ -1,6 +1,14 @@
-# MCP Orchestrator
+# 🐙 MCP Orchestrator
 
-MCP server for spawning parallel sub-agents with multi-CLI backend support.
+[![npm version](https://img.shields.io/npm/v/@ask149/mcp-orchestrator)](https://www.npmjs.com/package/@ask149/mcp-orchestrator)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org)
+[![Twitter Follow](https://img.shields.io/twitter/follow/iodevz_ai?style=social)](https://twitter.com/iodevz_ai)
+
+> **Turn one AI agent into a team.** Cross-platform MCP server for spawning parallel sub-agents with multi-CLI backend support.
+
+<!-- TODO: Add demo GIF here -->
+<!-- ![Demo](assets/demo.gif) -->
 
 ## Platform Support
 
@@ -83,14 +91,14 @@ Config files live at:
 {
   "cli": {
     "backend": "copilot",
-    
+
     "copilot": {
       "command": "copilot",
       "allowAllTools": false,
       "allowAllPaths": false,
       "model": null
     },
-    
+
     "claude": {
       "command": "claude",
       "allowAllTools": false,
