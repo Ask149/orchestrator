@@ -151,6 +151,18 @@ export const ClaudeBackend: CLIBackend = {
 
   defaultCommand: 'claude',
 
+  /**
+   * Augment prompt with MCP fallback instructions if browser automation is needed.
+   * Claude sub-agents also need fallback guidance when Playwright MCP fails
+   * (e.g., Chrome profile lock, browser not installed).
+   */
+  augmentPromptForMCP(prompt: string, mcpServers?: string[]): string {
+    if (mcpServers?.includes('playwright')) {
+      return `${prompt}\n\n${BROWSER_AUTOMATION_FALLBACK}`;
+    }
+    return prompt;
+  },
+
   buildArgs(prompt: string, options: CLIBackendOptions): string[] {
     const args: string[] = [];
 

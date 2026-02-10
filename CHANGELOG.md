@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.5] - 2026-02-09
+
+### Added
+- **Per-task Playwright profile isolation** — Each sub-agent now gets a unique `--user-data-dir` temp directory, preventing Chrome profile lock conflicts between concurrent tasks and the host session
+- **Claude `BROWSER_AUTOMATION_FALLBACK`** — `ClaudeBackend` now implements `augmentPromptForMCP()` so Claude sub-agents also receive fallback browser automation instructions when Playwright MCP is unavailable
+- **Claude auth deep-validation in health check** — `checkBackendAuth()` runs a quick `claude -p` prompt during health checks to catch "Invalid API key" errors that `--version` alone misses
+- **`allowAllPaths` warning** — Added documentation comment in `spawn.ts` warning that missing `allowAllPaths` can hang sub-agents in non-interactive mode
+- **Known Limitations section in README** — Comprehensive tables documenting Playwright MCP (profile lock, concurrency, headless, streaming) and Claude CLI (auth, schema) caveats with mitigations
+
+### Changed
+- Health check `healthy` flag now requires backends to have no errors (`b.available && !b.error`), not just `b.available`
+
 ## [1.1.2] - 2026-02-03
 
 ### Added

@@ -153,6 +153,13 @@ async function loadCLIConfig(): Promise<CLIConfig> {
 }
 
 /**
+ * WARNING: If copilot.allowAllPaths is not set in config.json, sub-agents running
+ * in non-interactive (-p) mode may hang when accessing files outside the workspace,
+ * because Copilot CLI will prompt for permission with no way to answer.
+ * Set "allowAllPaths": true in config.json for unattended execution.
+ */
+
+/**
  * Get CLI command path for a backend
  */
 function getCLICommand(backendName: string, cliConfig: CLIConfig): string {
@@ -303,6 +310,27 @@ async function createFilteredMCPConfig(
         found: foundServers,
         hint: 'Add missing servers to mcp-subagent.json'
       });
+    }
+
+    // Isolate Playwright browser profiles per sub-agent to avoid Chrome profile lock conflicts.
+    // Without this, concurrent sub-agents sharing --user-data-dir will fail because Chrome
+    // locks the profile directory to a single process.
+    for (const server of foundServers) {
+      const serverConfig = filteredConfig.mcpServers[server] as unknown as Record<string, unknown>;
+      const args = serverConfig.args as string[] | undefined;
+      if (server === 'playwright' && args) {
+        const udIdx = args.indexOf('--user-data-dir');
+        if (udIdx !== -1 && udIdx + 1 < args.length) {
+          const isolatedProfile = path.join(TEMP_DIR, `pw-profile-${taskId}-${Date.now()}`);
+          const originalDir = args[udIdx + 1];
+          args[udIdx + 1] = isolatedProfile;
+          logger.info('Isolated Playwright profile for sub-agent', {
+            taskId,
+            originalDir,
+            isolatedDir: isolatedProfile
+          });
+        }
+      }
     }
 
     // Write temp config

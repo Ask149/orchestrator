@@ -382,6 +382,24 @@ npm test
 npm test:watch
 ```
 
+## Known Limitations
+
+### Playwright MCP & Browser Automation
+
+| Issue | Description | Mitigation |
+|-------|-------------|------------|
+| **Chrome profile lock** | Chrome locks `--user-data-dir` to one process. If Chrome is already running with the same profile (e.g., VS Code's Playwright MCP), sub-agents cannot use Playwright MCP tools. | The orchestrator auto-generates isolated temp profiles per sub-agent (`/tmp/pw-profile-{taskId}`). If the MCP still fails, the `BROWSER_AUTOMATION_FALLBACK` prompt instructs sub-agents to use `chromium.launch({ headless: true })` via the Playwright npm package directly. |
+| **Parallel browser concurrency** | Multiple sub-agents requesting Playwright spawn separate browser instances, which increases memory/CPU usage. | Limit parallel Playwright tasks to 2-3 at a time. |
+| **No headless mode in MCP** | Playwright MCP launches a visible browser window by default, which steals focus and fails in CI/CD. | Pass `--headless` in the Playwright MCP args in `mcp-subagent.json`, or rely on the npm fallback which uses headless by default. |
+| **No output streaming** | Sub-agents buffer all stdout until process exit. For long Playwright tasks, there's no progress indication. | Use shorter, focused prompts. Complex multi-page workflows should be split into separate tasks. |
+
+### Claude CLI Backend
+
+| Issue | Description | Mitigation |
+|-------|-------------|------------|
+| **Auth not auto-detected** | `claude --version` succeeds without auth, but prompts fail with "Invalid API key". | The health check now runs a quick prompt to validate auth. Run `claude login` to fix. |
+| **Stricter MCP schema** | Claude CLI rejects `type` and `tools` fields in MCP config. | The orchestrator auto-strips these fields when generating Claude-compatible configs. |
+
 ## Testing
 
 Cross-platform smoke tests validate:

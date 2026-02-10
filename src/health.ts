@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
  * Health Check CLI for MCP Orchestrator
- * 
+ *
  * Usage:
  *   node dist/health.js
  *   npm run health
- * 
+ *
  * Exit codes:
  *   0 - At least one backend available
  *   1 - No backends available
@@ -92,6 +92,58 @@ async function checkBackend(
 }
 
 /**
+ * Deep auth validation — run a trivial prompt to verify the CLI is actually authenticated.
+ * Needed because some CLIs (e.g., Claude) pass --version without auth but fail on real prompts.
+ */
+async function checkBackendAuth(
+  name: string
+): Promise<{ authenticated: boolean; error?: string }> {
+  const backend = BackendRegistry[name];
+  if (!backend) return { authenticated: false, error: 'Unknown backend' };
+
+  let command = backend.defaultCommand;
+  if (name === 'claude' && process.env.CLAUDE_CLI) {
+    command = process.env.CLAUDE_CLI;
+  }
+
+  return new Promise((resolve) => {
+    const proc = spawn(command, ['-p', 'respond with ok', '--output-format', 'text', '--max-turns', '1'], {
+      timeout: 15000,
+      shell: IS_WINDOWS,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout?.on('data', (data) => { stdout += data.toString(); });
+    proc.stderr?.on('data', (data) => { stderr += data.toString(); });
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        resolve({ authenticated: true });
+      } else {
+        const output = (stdout + stderr).toLowerCase();
+        const isAuthError = output.includes('invalid api key') ||
+                           output.includes('login') ||
+                           output.includes('unauthorized') ||
+                           output.includes('authentication');
+        resolve({
+          authenticated: false,
+          error: isAuthError
+            ? 'Not authenticated (API key missing or invalid)'
+            : `Prompt failed with exit code ${code}: ${(stdout + stderr).trim().slice(0, 200)}`
+        });
+      }
+    });
+
+    proc.on('error', (error) => {
+      resolve({ authenticated: false, error: error.message });
+    });
+  });
+}
+
+/**
  * Check if config file exists and get default backend
  */
 async function checkConfig(): Promise<{ exists: boolean; defaultBackend?: string }> {
@@ -127,8 +179,21 @@ export async function checkHealth(): Promise<HealthCheckResult> {
     backends[name] = await checkBackend(command, name);
   }
 
+  // Deep-validate Claude auth: --version succeeds even without login,
+  // but actual prompts fail with "Invalid API key". Run a quick prompt to catch this.
+  if (backends['claude']?.available) {
+    const authStatus = await checkBackendAuth('claude');
+    if (!authStatus.authenticated) {
+      backends['claude'] = {
+        available: true,
+        version: backends['claude'].version,
+        error: `CLI found but not authenticated: ${authStatus.error}. Run: claude login`
+      };
+    }
+  }
+
   const config = await checkConfig();
-  const healthy = Object.values(backends).some((b) => b.available);
+  const healthy = Object.values(backends).some((b) => b.available && !b.error);
 
   return {
     healthy,
